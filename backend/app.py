@@ -267,16 +267,16 @@ def api_status():
         {"name": "Web Search (DuckDuckGo + Reddit)", "status": "active", "version": "2.5"},
     ]
 
-    # Load Tailwind CSS via CDN for the premium look
+    # Load Tailwind CSS via CDN for the premium tech look
     html_template = """
     <!DOCTYPE html>
     <html lang="en" class="antialiased">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>SIFRA:MIND | Deployment Status</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+        <title>SIFRA:MIND | Telemetry</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -287,9 +287,9 @@ def api_status():
                             mono: ['JetBrains Mono', 'monospace'],
                         },
                         colors: {
-                            brand: {
-                                500: '#3b82f6', // blue-500
-                                900: '#1e3a8a', // blue-900
+                            zinc: {
+                                950: '#09090b',
+                                900: '#18181b',
                             }
                         }
                     }
@@ -297,120 +297,144 @@ def api_status():
             }
         </script>
         <style>
-            body { background-color: #0f172a; color: #f8fafc; } /* slate-900 bg, slate-50 text */
-            .glass-card {
-                background: rgba(30, 41, 59, 0.5); /* slate-800 w/ opacity */
-                backdrop-filter: blur(12px);
-                border: 1px solid rgba(51, 65, 85, 0.8); /* slate-700 */
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            body { 
+                background-color: #050505; 
+                color: #e4e4e7;
+                background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+                background-size: 24px 24px;
+            }
+            .tech-card {
+                background: rgba(24, 24, 27, 0.4); /* zinc-900 / 40% */
+                border: 1px solid rgba(63, 63, 70, 0.2); /* zinc-700 / 20% */
+                box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.02);
+            }
+            .pulse-dot {
+                animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: .4; }
             }
         </style>
     </head>
-    <body class="min-h-screen p-4 md:p-12 lg:p-24 selection:bg-brand-500 selection:text-white">
-        <div class="max-w-5xl mx-auto">
+    <body class="min-h-screen p-6 md:p-16 lg:p-24 selection:bg-zinc-800 selection:text-white">
+        <div class="max-w-6xl mx-auto flex flex-col gap-16">
             
-            <!-- Header Section -->
-            <header class="mb-16 border-l-4 border-brand-500 pl-6 py-1">
-                <div class="flex items-center gap-3 mb-3">
-                    <span class="font-mono text-xs font-semibold px-2 py-1 rounded bg-brand-900 border border-brand-500 text-brand-500 uppercase tracking-widest">
-                        System Diagnostics
-                    </span>
-                    <span class="font-mono text-xs text-slate-400">v{version}</span>
+            <!-- Minimalist Header -->
+            <header class="flex flex-col gap-4">
+                <div class="flex items-center gap-4">
+                    <div class="h-1 w-12 bg-zinc-300"></div>
+                    <span class="font-mono text-[10px] tracking-[0.2em] text-zinc-500 uppercase">System Telemetry Log</span>
                 </div>
-                <h1 class="text-4xl md:text-5xl font-bold tracking-tight text-white mb-2">SIFRA:MIND Core</h1>
-                <p class="text-lg text-slate-400 max-w-2xl">Real-time telemetry and deployment health metrics.</p>
+                <h1 class="text-4xl md:text-5xl font-semibold tracking-tighter text-zinc-100">SIFRA:MIND</h1>
+                <div class="flex items-center gap-6 mt-2">
+                    <div class="flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
+                        <span class="font-mono text-xs text-zinc-400">All systems operational</span>
+                    </div>
+                    <span class="font-mono text-xs text-zinc-600">v{version}</span>
+                </div>
             </header>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
-                <!-- System Health Card -->
-                <div class="glass-card rounded-2xl p-6 md:p-8 transition-all duration-300 hover:border-slate-500">
-                    <h2 class="text-xl font-semibold mb-6 flex items-center gap-3">
-                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
-                        System Health
-                    </h2>
-                    <div class="space-y-4">
-                        <div class="flex justify-between items-center pb-4 border-b border-slate-700/50">
-                            <span class="text-sm text-slate-400 font-medium">Database Connection</span>
-                            <span class="font-mono text-sm {db_class}">{db_conn}</span>
+                <!-- Left Column: Core Infrastructure -->
+                <div class="lg:col-span-5 flex flex-col gap-6">
+                    
+                    <div class="tech-card rounded-lg p-6">
+                        <h2 class="font-mono text-xs font-semibold tracking-widest text-zinc-500 uppercase mb-8 flex items-center gap-3">
+                            <svg class="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+                            Infrastructure
+                        </h2>
+                        <div class="flex flex-col gap-5">
+                            <div class="flex justify-between items-baseline border-b border-zinc-800/50 pb-4">
+                                <span class="text-sm font-medium text-zinc-400">Database Engine</span>
+                                <span class="font-mono text-sm {db_class}">{db_conn}</span>
+                            </div>
+                            <div class="flex justify-between items-baseline border-b border-zinc-800/50 pb-4">
+                                <span class="text-sm font-medium text-zinc-400">Memory Allocation</span>
+                                <span class="font-mono text-sm text-zinc-200">PostgreSQL Vector</span>
+                            </div>
+                            <div class="flex justify-between items-baseline border-b border-zinc-800/50 pb-4">
+                                <span class="text-sm font-medium text-zinc-400">Last Synced</span>
+                                <span class="font-mono text-sm text-zinc-200">{build_date}</span>
+                            </div>
+                            <div class="flex justify-between items-baseline">
+                                <span class="text-sm font-medium text-zinc-400">Environment</span>
+                                <span class="font-mono text-xs text-zinc-500 border border-zinc-800 px-2 py-0.5">PROD</span>
+                            </div>
                         </div>
-                        <div class="flex justify-between items-center pb-4 border-b border-slate-700/50">
-                            <span class="text-sm text-slate-400 font-medium">Last Deployment</span>
-                            <span class="font-mono text-sm text-slate-200">{build_date}</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm text-slate-400 font-medium">Environment</span>
-                            <span class="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Production</span>
+                    </div>
+
+                    <div class="tech-card rounded-lg p-6">
+                        <h2 class="font-mono text-xs font-semibold tracking-widest text-zinc-500 uppercase mb-8 flex items-center gap-3">
+                            <svg class="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                            Security Handshakes
+                        </h2>
+                        <div class="flex flex-col gap-3">
+                            {env_html}
                         </div>
                     </div>
                 </div>
 
-                <!-- Environment Vars Card -->
-                <div class="glass-card rounded-2xl p-6 md:p-8 transition-all duration-300 hover:border-slate-500">
-                    <h2 class="text-xl font-semibold mb-6 flex items-center gap-3">
-                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
-                        Environment Variables
-                    </h2>
-                    <div class="space-y-3">
-                        {env_html}
+                <!-- Right Column: Microservices & Features -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <div class="tech-card rounded-lg p-6">
+                        <h2 class="font-mono text-xs font-semibold tracking-widest text-zinc-500 uppercase mb-8 flex items-center gap-3">
+                            <svg class="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                            Running Modules
+                        </h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {module_html}
+                        </div>
+                    </div>
+
+                    <div class="tech-card rounded-lg p-6 flex-1">
+                        <div class="flex justify-between items-center mb-8">
+                            <h2 class="font-mono text-xs font-semibold tracking-widest text-zinc-500 uppercase flex items-center gap-3">
+                                <svg class="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                                Logic Protocols
+                            </h2>
+                            <span class="font-mono text-xs text-zinc-600 border border-zinc-800 px-2 py-0.5">COUNT: {total_features}</span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                            {feature_html}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Internal Modules -->
-            <div class="glass-card rounded-2xl p-6 md:p-8 mb-12 transition-all duration-300 hover:border-slate-500">
-                <h2 class="text-xl font-semibold mb-8 flex items-center gap-3">
-                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                    Internal Modules
-                </h2>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {module_html}
-                </div>
-            </div>
-
-            <!-- Active Features Dashboard -->
-            <div class="glass-card rounded-2xl p-6 md:p-8 transition-all duration-300 hover:border-slate-500">
-                <div class="flex justify-between items-center mb-8">
-                    <h2 class="text-xl font-semibold flex items-center gap-3">
-                        <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                        Active Features
-                    </h2>
-                    <span class="text-sm text-slate-400 font-mono">Total: {total_features}</span>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {feature_html}
-                </div>
-            </div>
-
-            <!-- Footer -->
-            <footer class="mt-16 text-center text-sm text-slate-500 font-mono">
-                Running continuously since {build_date}
+            <footer class="text-xs font-mono text-zinc-600 border-t border-zinc-800/50 pt-8 flex justify-between">
+                <span>SIFRA:MIND Core Data Center</span>
+                <span>{build_date}</span>
             </footer>
         </div>
     </body>
     </html>
     """
 
-    # Helper styles for components
-    success_badge = '<span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Set</span>'
-    error_badge = '<span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-red-500/10 text-red-400 border border-red-500/20">Missing</span>'
+    # Ultra-minimalist UI components - zero rounding on badges, raw text colors
+    success_text = '<span class="font-mono text-[10px] text-emerald-400 tracking-widest">OK</span>'
+    error_text = '<span class="font-mono text-[10px] text-zinc-500 tracking-widest">ERR</span>'
     
     env_html = ""
     for env, val in env_vars.items():
-        status = success_badge if val else error_badge
-        env_html += f'<div class="flex justify-between items-center"><span class="font-mono text-sm text-slate-300">{env}</span>{status}</div>'
+        status = success_text if val else error_text
+        env_html += f'<div class="flex justify-between items-center py-1"><span class="font-mono text-xs text-zinc-300">{env}</span>{status}</div>'
     
     module_html = ""
     for mod, data in module_status.items():
         loaded = "✅" in data['status']
-        status_dot = '<span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>' if loaded else '<span class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></span>'
-        module_html += f'<div class="flex flex-col p-4 rounded-xl bg-slate-800/50 border border-slate-700/50"><div class="flex items-center gap-2 mb-2">{status_dot}<span class="font-mono text-sm font-medium text-slate-200">{mod}</span></div><p class="text-xs text-slate-500 leading-snug">{data["description"]}</p></div>'
+        status_dot = '<span class="w-1.5 h-1.5 bg-emerald-500"></span>' if loaded else '<span class="w-1.5 h-1.5 bg-zinc-600"></span>'
+        text_color = 'text-zinc-200' if loaded else 'text-zinc-500'
+        module_html += f'<div class="flex flex-col p-4 border border-zinc-800/40 bg-zinc-900/10 hover:bg-zinc-900/40 transition-colors"><div class="flex items-center gap-3 mb-2">{status_dot}<span class="font-mono text-xs {text_color} tracking-tight">{mod}</span></div><p class="font-sans text-xs text-zinc-500 leading-relaxed">{data["description"]}</p></div>'
 
     feature_html = ""
     for f in features:
-        feature_html += f'<div class="flex justify-between items-center p-4 rounded-xl bg-slate-800/30 border border-slate-700/30 hover:bg-slate-800/50 transition-colors"><div class="flex flex-col"><span class="text-sm font-medium text-slate-200">{f["name"]}</span><span class="font-mono text-xs text-slate-500 mt-0.5">v{f["version"]}</span></div><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span></div>'
+        feature_html += f'<div class="flex justify-between items-baseline border-b border-zinc-800/30 py-2 group"><div class="flex items-center gap-3"><span class="text-zinc-700 group-hover:text-zinc-500 transition-colors">▶</span><span class="font-sans text-sm font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors">{f["name"]}</span></div><span class="font-mono text-[10px] text-zinc-600">v{f["version"]}</span></div>'
 
-    db_class = "text-emerald-400" if "connected" in db_status else "text-red-400"
+    db_class = "text-emerald-400" if "connected" in db_status else "text-zinc-500"
     
     
     # Use .replace instead of .format to avoid CSS brace conflicts
