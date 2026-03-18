@@ -267,148 +267,151 @@ def api_status():
         {"name": "Web Search (DuckDuckGo + Reddit)", "status": "active", "version": "2.5"},
     ]
 
+    # Load Tailwind CSS via CDN for the premium look
     html_template = """
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="en" class="antialiased">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>SIFRA:MIND | Deployment Status</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ['Inter', 'sans-serif'],
+                            mono: ['JetBrains Mono', 'monospace'],
+                        },
+                        colors: {
+                            brand: {
+                                500: '#3b82f6', // blue-500
+                                900: '#1e3a8a', // blue-900
+                            }
+                        }
+                    }
+                }
+            }
+        </script>
         <style>
-            :root {
-                --primary: #2563eb;
-                --bg: #0f172a;
-                --card-bg: rgba(30, 41, 59, 0.7);
-                --border: rgba(51, 65, 85, 0.5);
-                --text-main: #f8fafc;
-                --text-dim: #94a3b8;
-                --success: #10b981;
-                --error: #ef4444;
-            }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-                font-family: 'Inter', sans-serif; 
-                background-color: var(--bg); 
-                color: var(--text-main); 
-                line-height: 1.625;
-                padding: 48px 24px;
-            }
-            .container { max-width: 1024px; mx-auto; margin: 0 auto; }
-            
-            header { margin-bottom: 64px; border-left: 4px solid var(--primary); padding-left: 24px; }
-            h1 { font-size: 48px; font-weight: 700; tracking-tight: -0.025em; margin-bottom: 8px; }
-            .subtitle { font-size: 18px; color: var(--text-dim); }
-
-            .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 48px; }
-            
-            .card { 
-                background: var(--card-bg); 
-                backdrop-filter: blur(12px); 
-                border: 1px solid var(--border); 
-                border-radius: 16px; 
-                padding: 24px;
-                transition: transform 0.2s, box-shadow 0.2s;
-            }
-            .card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
-            
-            h2 { font-size: 20px; font-weight: 600; margin-bottom: 24px; display: flex; align-items: center; gap: 8px; }
-            
-            .status-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 14px; }
-            .status-label { color: var(--text-dim); }
-            .status-val { font-weight: 500; font-family: monospace; }
-            
-            .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-            .badge-success { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); }
-            .badge-error { background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid var(--error); }
-
-            .feature-list { display: grid; grid-template-columns: 1fr; gap: 12px; }
-            .feature-item { 
-                display: flex; justify-content: space-between; align-items: center; 
-                padding: 12px 16px; background: rgba(255,255,255,0.03); 
-                border-radius: 12px; font-size: 14px;
-            }
-            .feature-name { font-weight: 500; }
-            .feature-version { font-size: 12px; color: var(--text-dim); }
-
-            .tag { font-size: 12px; font-family: monospace; color: var(--primary); font-weight: 600; }
-            
-            @media (max-width: 640px) {
-                h1 { font-size: 32px; }
-                body { padding: 24px 16px; }
+            body { background-color: #0f172a; color: #f8fafc; } /* slate-900 bg, slate-50 text */
+            .glass-card {
+                background: rgba(30, 41, 59, 0.5); /* slate-800 w/ opacity */
+                backdrop-filter: blur(12px);
+                border: 1px solid rgba(51, 65, 85, 0.8); /* slate-700 */
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             }
         </style>
     </head>
-    <body>
-        <div class="container">
-            <header>
-                <div class="tag">BACKEND v{version}</div>
-                <h1>SIFRA:MIND</h1>
-                <p class="subtitle">Real-time deployment status & health dashboard</p>
+    <body class="min-h-screen p-4 md:p-12 lg:p-24 selection:bg-brand-500 selection:text-white">
+        <div class="max-w-5xl mx-auto">
+            
+            <!-- Header Section -->
+            <header class="mb-16 border-l-4 border-brand-500 pl-6 py-1">
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="font-mono text-xs font-semibold px-2 py-1 rounded bg-brand-900 border border-brand-500 text-brand-500 uppercase tracking-widest">
+                        System Diagnostics
+                    </span>
+                    <span class="font-mono text-xs text-slate-400">v{version}</span>
+                </div>
+                <h1 class="text-4xl md:text-5xl font-bold tracking-tight text-white mb-2">SIFRA:MIND Core</h1>
+                <p class="text-lg text-slate-400 max-w-2xl">Real-time telemetry and deployment health metrics.</p>
             </header>
 
-            <div class="grid">
-                <!-- System Health -->
-                <div class="card">
-                    <h2>⚙️ System Health</h2>
-                    <div class="status-item">
-                        <span class="status-label">Database</span>
-                        <span class="status-val {db_class}">{db_conn}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Build Date</span>
-                        <span class="status-val">{build_date}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Environment</span>
-                        <span class="status-val badge badge-success">Production</span>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+                
+                <!-- System Health Card -->
+                <div class="glass-card rounded-2xl p-6 md:p-8 transition-all duration-300 hover:border-slate-500">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center gap-3">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
+                        System Health
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center pb-4 border-b border-slate-700/50">
+                            <span class="text-sm text-slate-400 font-medium">Database Connection</span>
+                            <span class="font-mono text-sm {db_class}">{db_conn}</span>
+                        </div>
+                        <div class="flex justify-between items-center pb-4 border-b border-slate-700/50">
+                            <span class="text-sm text-slate-400 font-medium">Last Deployment</span>
+                            <span class="font-mono text-sm text-slate-200">{build_date}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-slate-400 font-medium">Environment</span>
+                            <span class="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Production</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Env Vars -->
-                <div class="card">
-                    <h2>🔑 Environment Vars</h2>
-                    {env_html}
+                <!-- Environment Vars Card -->
+                <div class="glass-card rounded-2xl p-6 md:p-8 transition-all duration-300 hover:border-slate-500">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center gap-3">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                        Environment Variables
+                    </h2>
+                    <div class="space-y-3">
+                        {env_html}
+                    </div>
                 </div>
             </div>
 
-            <!-- Modules -->
-            <div class="card" style="margin-bottom: 24px;">
-                <h2>📦 Internal Modules</h2>
-                <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 0;">
+            <!-- Internal Modules -->
+            <div class="glass-card rounded-2xl p-6 md:p-8 mb-12 transition-all duration-300 hover:border-slate-500">
+                <h2 class="text-xl font-semibold mb-8 flex items-center gap-3">
+                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    Internal Modules
+                </h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {module_html}
                 </div>
             </div>
 
-            <!-- Features -->
-            <div class="card">
-                <h2>✨ Active Features</h2>
-                <div class="feature-list" style="grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); display: grid;">
+            <!-- Active Features Dashboard -->
+            <div class="glass-card rounded-2xl p-6 md:p-8 transition-all duration-300 hover:border-slate-500">
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-xl font-semibold flex items-center gap-3">
+                        <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        Active Features
+                    </h2>
+                    <span class="text-sm text-slate-400 font-mono">Total: {total_features}</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {feature_html}
                 </div>
             </div>
+
+            <!-- Footer -->
+            <footer class="mt-16 text-center text-sm text-slate-500 font-mono">
+                Running continuously since {build_date}
+            </footer>
         </div>
     </body>
     </html>
     """
 
-    # Helper to build HTML snippets
+    # Helper styles for components
+    success_badge = '<span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Set</span>'
+    error_badge = '<span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-red-500/10 text-red-400 border border-red-500/20">Missing</span>'
+    
     env_html = ""
     for env, val in env_vars.items():
-        status = '<span class="badge badge-success">Set</span>' if val else '<span class="badge badge-error">Missing</span>'
-        env_html += f'<div class="status-item"><span class="status-label">{env}</span>{status}</div>'
+        status = success_badge if val else error_badge
+        env_html += f'<div class="flex justify-between items-center"><span class="font-mono text-sm text-slate-300">{env}</span>{status}</div>'
     
     module_html = ""
     for mod, data in module_status.items():
         loaded = "✅" in data['status']
-        status = '<span class="badge badge-success">Loaded</span>' if loaded else '<span class="badge badge-error">Error</span>'
-        module_html += f'<div style="text-align: center; border: 1px solid var(--border); padding: 16px; border-radius: 12px; background: rgba(0,0,0,0.1);"><div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">{mod}</div>{status}</div>'
+        status_dot = '<span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>' if loaded else '<span class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></span>'
+        module_html += f'<div class="flex flex-col p-4 rounded-xl bg-slate-800/50 border border-slate-700/50"><div class="flex items-center gap-2 mb-2">{status_dot}<span class="font-mono text-sm font-medium text-slate-200">{mod}</span></div><p class="text-xs text-slate-500 leading-snug">{data["description"]}</p></div>'
 
     feature_html = ""
     for f in features:
-        feature_html += f'<div class="feature-item"><div class="feature-name">{f["name"]} <span class="feature-version">v{f["version"]}</span></div><span class="badge badge-success">Online</span></div>'
+        feature_html += f'<div class="flex justify-between items-center p-4 rounded-xl bg-slate-800/30 border border-slate-700/30 hover:bg-slate-800/50 transition-colors"><div class="flex flex-col"><span class="text-sm font-medium text-slate-200">{f["name"]}</span><span class="font-mono text-xs text-slate-500 mt-0.5">v{f["version"]}</span></div><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span></div>'
 
-    db_class = "success" if "connected" in db_status else "error"
+    db_class = "text-emerald-400" if "connected" in db_status else "text-red-400"
+    
     
     # Use .replace instead of .format to avoid CSS brace conflicts
     content = html_template.replace("{version}", VERSION) \
