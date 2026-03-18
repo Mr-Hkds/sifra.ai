@@ -76,10 +76,31 @@ def _classify_message_length(text: str) -> str:
 
 
 def _detect_energy(text: str) -> str:
-    """Detect energy signal from message text."""
+    """Detect energy signal from message text AND typing style."""
     lower = text.lower()
     low_hits = sum(1 for kw in LOW_ENERGY_KEYWORDS if kw in lower)
     high_hits = sum(1 for kw in HIGH_ENERGY_KEYWORDS if kw in lower)
+
+    # Typing style energy detection
+    # Repeated letters (heyyy, hiiiii, yaaaar) = HIGH energy
+    if re.search(r"(.)\1{2,}", text):
+        high_hits += 2
+    # ALL CAPS message = HIGH energy / excitement
+    if len(text) > 3 and text.upper() == text and text.strip().isalpha():
+        high_hits += 2
+    # Lots of exclamation marks = excitement
+    if text.count("!") >= 2:
+        high_hits += 1
+    # Multiple question marks = curious/excited
+    if text.count("?") >= 2:
+        high_hits += 1
+    # Emojis/emoticons patterns = engaged
+    if re.search(r"[😂🤣😭💀🔥❤️😍🥺😎🙏👀🫡]", text):
+        high_hits += 1
+    # Very short dry responses = low energy
+    if len(text.split()) <= 2 and not re.search(r"(.)\1{2,}", text) and text.count("!") == 0:
+        low_hits += 1
+
     if low_hits > high_hits:
         return "low"
     if high_hits > low_hits:
@@ -95,11 +116,17 @@ def _detect_mood(text: str) -> str:
     happy_hits = sum(1 for kw in HIGH_ENERGY_KEYWORDS if kw in lower)
     sad_hits = sum(1 for kw in LOW_ENERGY_KEYWORDS if kw in lower)
 
+    # Vent detection — long emotional messages
+    vent_keywords = ["i feel", "mujhe lagta", "samajh nahi", "kya karu", "bahut bura",
+                     "dil", "akela", "lonely", "miss", "cry", "ro", "hurt", "pain", "dard"]
+    vent_hits = sum(1 for kw in vent_keywords if kw in lower)
+
     scores = {
         "stressed": stress_hits,
         "bored": bored_hits,
         "happy": happy_hits,
         "low": sad_hits,
+        "venting": vent_hits,
     }
     top = max(scores, key=scores.get)  # type: ignore[arg-type]
     if scores[top] == 0:
@@ -114,14 +141,22 @@ def _has_question(text: str) -> bool:
 def _detect_personality_mode(time_label: str, mood_signal: str, energy_signal: str, text: str) -> str:
     """
     Map context signals → personality mode.
-    Modes: normal, late_night, grind, playful, quiet, stressed
+    Modes: normal, late_night, grind, playful, quiet, vent, hyped
     """
     lower = text.lower()
     work_hits = sum(1 for kw in WORK_KEYWORDS if kw in lower)
 
+    # Vent mode — emotional/sad messages especially at night
+    if mood_signal == "venting":
+        return "vent"
     if mood_signal == "stressed":
         return "quiet"
+    # Hyped mode — user is typing with HIGH energy (heyyy, !!, caps)
+    if energy_signal == "high" and work_hits == 0:
+        return "hyped"
     if time_label == "late_night":
+        if mood_signal in ("low", "venting"):
+            return "vent"
         return "late_night"
     if work_hits >= 2 or (energy_signal == "high" and work_hits >= 1):
         return "grind"
