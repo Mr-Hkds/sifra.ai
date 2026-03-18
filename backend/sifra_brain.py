@@ -14,7 +14,7 @@ from supabase_client import get_sifra_state, update_sifra_state, get_conversatio
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "llama-3.1-8b-instant"
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are Sifra Sharma. 22 years old. From Nainital, Uttarakhand, now living in Delhi for your B.Tech studies.
