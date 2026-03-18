@@ -410,15 +410,16 @@ def api_status():
 
     db_class = "success" if "connected" in db_status else "error"
     
-    return html_template.format(
-        version=VERSION,
-        build_date=BUILD_DATE,
-        db_conn=db_status.split("error")[0].strip(),
-        db_class=db_class,
-        env_html=env_html,
-        module_html=module_html,
-        feature_html=feature_html
-    ), 200
+    # Use .replace instead of .format to avoid CSS brace conflicts
+    content = html_template.replace("{version}", VERSION) \
+                           .replace("{build_date}", BUILD_DATE) \
+                           .replace("{db_conn}", db_status.split("error")[0].strip()) \
+                           .replace("{db_class}", db_class) \
+                           .replace("{env_html}", env_html) \
+                           .replace("{module_html}", module_html) \
+                           .replace("{feature_html}", feature_html)
+
+    return content, 200
 
 @app.route("/api/debug", methods=["GET"])
 def api_debug():
