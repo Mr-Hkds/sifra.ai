@@ -248,7 +248,7 @@ def generate_response(user_message: str, peek_context: dict) -> str:
         return reply
     except Exception as e:
         logger.error(f"generate_response failed: {e}")
-        return "yr kuch technical issue aa raha hai mujhe... ek sec ruk, try again kar"
+        return f"yr kuch technical issue aa raha hai mujhe... ek sec ruk, try again kar (Error: {str(e)})"
 
 
 def _update_sifra_mood_from_context(peek_context: dict) -> None:
