@@ -176,6 +176,21 @@ def api_run_decay():
         return jsonify({"error": "Decay job failed"}), 500
 
 
+@app.route("/api/proactive", methods=["GET", "POST"])
+def api_proactive():
+    """
+    Proactive messaging endpoint — triggered by Vercel Cron.
+    Sifra sends messages on her own: greetings, internet finds, random thoughts.
+    """
+    try:
+        from proactive import run_proactive_job
+        result = run_proactive_job()
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"/api/proactive error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/debug", methods=["GET"])
 def api_debug():
     """Diagnostic endpoint to check env vars and connection."""
