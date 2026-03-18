@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #0a0a0a;
+  --color-bg-card: #111111;
+  --color-bg-card-hover: #1a1a1a;
+  --color-border: #222222;
+  --color-border-subtle: #1a1a1a;
+  --color-accent-green: #00ff9d;
+  --color-accent-green-dim: #00cc7d;
+  --color-accent-green-glow: rgba(0, 255, 157, 0.15);
+  --color-accent-pink: #ff3c78;
+  --color-accent-pink-dim: #cc3060;
+  --color-accent-pink-glow: rgba(255, 60, 120, 0.15);
+  --color-accent-yellow: #ffd60a;
+  --color-accent-blue: #3b82f6;
+  --color-accent-purple: #a855f7;
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #888888;
+  --color-text-muted: #555555;
+  --font-mono: 'JetBrains Mono', 'Space Mono', 'Courier New', monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Animations */
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.animate-pulse-green {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+/* Glow effects */
+.glow-green {
+  box-shadow: 0 0 12px var(--color-accent-green-glow),
+              0 0 30px rgba(0, 255, 157, 0.05);
+}
+
+.glow-pink {
+  box-shadow: 0 0 12px var(--color-accent-pink-glow),
+              0 0 30px rgba(255, 60, 120, 0.05);
+}
+
+/* Line number gutter styling */
+.line-number {
+  color: var(--color-text-muted);
+  user-select: none;
+  font-size: 10px;
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Category badges */
+.badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.badge-core { background: rgba(0, 255, 157, 0.15); color: var(--color-accent-green); }
+.badge-emotional { background: rgba(255, 60, 120, 0.15); color: var(--color-accent-pink); }
+.badge-habit { background: rgba(255, 214, 10, 0.15); color: var(--color-accent-yellow); }
+.badge-preference { background: rgba(59, 130, 246, 0.15); color: var(--color-accent-blue); }
+.badge-event { background: rgba(168, 85, 247, 0.15); color: var(--color-accent-purple); }
+.badge-forget { background: rgba(85, 85, 85, 0.15); color: var(--color-text-muted); }
