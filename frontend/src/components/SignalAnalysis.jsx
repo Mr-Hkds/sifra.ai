@@ -10,18 +10,18 @@ import { fetchMoodHistory } from '../utils/api';
  */
 
 const MOOD_COLORS = {
-  happy: '#00ff9d',
-  neutral: '#888888',
-  stressed: '#ff3c78',
-  sad: '#3b82f6',
-  bored: '#ffd60a',
-  excited: '#a855f7',
-  tired: '#ff3c78',
-  anxious: '#ffd60a',
-  angry: '#ff3c78',
-  curious: '#3b82f6',
-  playful: '#a855f7',
-  frustrated: '#ff3c78',
+  happy: '#ff6a00',
+  neutral: '#52525b',
+  stressed: '#ff6a00',
+  sad: '#52525b',
+  bored: '#52525b',
+  excited: '#ff6a00',
+  tired: '#52525b',
+  anxious: '#ff6a00',
+  angry: '#ff6a00',
+  curious: '#a1a1aa',
+  playful: '#ff6a00',
+  frustrated: '#ff6a00',
 };
 
 function ContextDisplay({ state }) {
@@ -135,11 +135,11 @@ function MoodGraph({ data }) {
 
 function PersonalityHistory({ state }) {
   const modes = [
-    { mode: 'normal', desc: 'Balanced, everyday Sifra', color: '#00ff9d' },
-    { mode: 'late_night', desc: 'Quiet, introspective', color: '#3b82f6' },
-    { mode: 'grind', desc: 'Focused, sharp', color: '#ffd60a' },
-    { mode: 'playful', desc: 'Teasing, light', color: '#a855f7' },
-    { mode: 'quiet', desc: 'Gentle, present', color: '#ff3c78' },
+    { mode: 'normal', desc: 'Balanced, everyday Sifra', color: '#52525b' },
+    { mode: 'late_night', desc: 'Quiet, introspective', color: '#a1a1aa' },
+    { mode: 'grind', desc: 'Focused, sharp', color: '#ff6a00' },
+    { mode: 'playful', desc: 'Teasing, light', color: '#ff6a00' },
+    { mode: 'quiet', desc: 'Gentle, present', color: '#52525b' },
   ];
 
   return (

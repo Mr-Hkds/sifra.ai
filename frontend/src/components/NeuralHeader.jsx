@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Brain, Zap, Clock, Activity } from 'lucide-react';
-import PulseLine from './PulseLine';
+import { Brain, Zap, Clock, Activity } from 'lucide-react';
 
 /**
  * NeuralHeader — the top bar of SIFRA:MIND
@@ -47,11 +47,6 @@ export default function NeuralHeader({ state }) {
 
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]">
-      {/* EKG Pulse Line */}
-      <div className="h-10 w-full overflow-hidden opacity-60">
-        <PulseLine mood={current_mood} energy={energy_level} />
-      </div>
-
       {/* Header content */}
       <div className="flex items-center justify-between px-5 py-3">
         {/* Logo */}
@@ -90,9 +85,7 @@ export default function NeuralHeader({ state }) {
                   key={i}
                   className="w-[3px] h-3 rounded-sm transition-all duration-300"
                   style={{
-                    backgroundColor: i < energy_level
-                      ? (i < 3 ? '#ff3c78' : i < 6 ? '#ffd60a' : '#00ff9d')
-                      : '#222',
+                    backgroundColor: i < energy_level ? '#ff6a00' : '#222',
                   }}
                 />
               ))}

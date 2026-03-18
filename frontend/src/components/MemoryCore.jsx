@@ -9,20 +9,11 @@ import { Plus, Trash2, Database, X } from 'lucide-react';
 
 const CATEGORIES = ['all', 'core', 'emotional', 'habit', 'preference', 'event'];
 
-function DecayIndicator({ score }) {
-  const width = Math.max(0, Math.min(100, score * 100));
-  const color = score > 0.6 ? '#00ff9d' : score > 0.3 ? '#ffd60a' : '#ff3c78';
-
+function DecayText({ score }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1 bg-[#222] rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${width}%`, backgroundColor: color }}
-        />
-      </div>
-      <span className="text-[9px] text-[var(--color-text-muted)]">{(score || 0).toFixed(2)}</span>
-    </div>
+    <span className="text-[10px] text-[var(--color-text-muted)] font-mono tracking-wider">
+      DECAY: {(score || 0).toFixed(2)}
+    </span>
   );
 }
 
@@ -70,10 +61,10 @@ function MemoryCard({ memory, onDelete }) {
       </p>
 
       {/* Bottom: decay + refs */}
-      <div className="flex items-center justify-between">
-        <DecayIndicator score={decay_score} />
-        <span className="text-[9px] text-[var(--color-text-muted)]">
-          ref: {times_referenced || 0}
+      <div className="flex items-center justify-between mt-1 pt-2 border-t border-[var(--color-border-subtle)]">
+        <DecayText score={decay_score} />
+        <span className="text-[10px] text-[var(--color-text-muted)] font-mono tracking-wider">
+          REF: {times_referenced || 0}
         </span>
       </div>
     </motion.div>
