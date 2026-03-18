@@ -176,6 +176,37 @@ def api_run_decay():
         return jsonify({"error": "Decay job failed"}), 500
 
 
+@app.route("/api/debug", methods=["GET"])
+def api_debug():
+    """Diagnostic endpoint to check env vars and connection."""
+    try:
+        url = os.environ.get("SUPABASE_URL", "MISSING")
+        key = os.environ.get("SUPABASE_KEY", "MISSING")
+        bot = os.environ.get("TELEGRAM_BOT_TOKEN", "MISSING")
+        uid = os.environ.get("USER_TELEGRAM_ID", "MISSING")
+
+        # Basic connection test
+        from supabase_client import get_client
+        error_msg = None
+        try:
+            get_client().table("sifra_state").select("*").limit(1).execute()
+        except Exception as e:
+            error_msg = str(e)
+
+        return jsonify({
+            "env": {
+                "SUPABASE_URL": url[:15] + "..." if url != "MISSING" else url,
+                "SUPABASE_KEY_STRLEN": len(key) if key != "MISSING" else 0,
+                "TELEGRAM_BOT_TOKEN": bot[:5] + "..." if bot != "MISSING" else bot,
+                "USER_TELEGRAM_ID": uid
+            },
+            "supabase_error": error_msg,
+            "status": "connected" if not error_msg else "failed"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     """Health check endpoint."""
