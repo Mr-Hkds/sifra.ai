@@ -250,32 +250,175 @@ def api_status():
 
     # Feature checklist
     features = [
-        {"name": "Telegram Bot", "status": "✅ active", "version": "1.0"},
-        {"name": "Memory System", "status": "✅ active", "version": "1.0"},
-        {"name": "Context Signals (IST Time + Location)", "status": "✅ active", "version": "2.0"},
-        {"name": "Core Rules (Secret Element)", "status": "✅ active", "version": "2.0"},
-        {"name": "Anti-Hallucination Guards", "status": "✅ active", "version": "2.1"},
-        {"name": "Graceful Deflection (calls/photos/meet)", "status": "✅ active", "version": "2.1"},
-        {"name": "Energy Matching (typing style)", "status": "✅ active", "version": "2.2"},
-        {"name": "Vent Mode", "status": "✅ active", "version": "2.2"},
-        {"name": "Hyped Mode", "status": "✅ active", "version": "2.2"},
-        {"name": "Proactive: Good Morning/Night", "status": "✅ active", "version": "2.3"},
-        {"name": "Proactive: Reddit Gossip", "status": "✅ active", "version": "2.3"},
-        {"name": "Proactive: Kidhar Ho Detector", "status": "✅ active", "version": "2.3"},
-        {"name": "Proactive: Music Recommendations", "status": "✅ active", "version": "2.3"},
-        {"name": "Proactive: Random Thoughts", "status": "✅ active", "version": "2.3"},
-        {"name": "Web Search (DuckDuckGo + Reddit)", "status": "✅ active", "version": "2.5"},
+        {"name": "Telegram Bot", "status": "active", "version": "1.0"},
+        {"name": "Memory System", "status": "active", "version": "1.0"},
+        {"name": "Context Signals (IST Time + Location)", "status": "active", "version": "2.0"},
+        {"name": "Core Rules (Secret Element)", "status": "active", "version": "2.0"},
+        {"name": "Anti-Hallucination Guards", "status": "active", "version": "2.1"},
+        {"name": "Graceful Deflection (calls/photos/meet)", "status": "active", "version": "2.1"},
+        {"name": "Energy Matching (typing style)", "status": "active", "version": "2.2"},
+        {"name": "Vent Mode", "status": "active", "version": "2.2"},
+        {"name": "Hyped Mode", "status": "active", "version": "2.2"},
+        {"name": "Proactive: Good Morning/Night", "status": "active", "version": "2.3"},
+        {"name": "Proactive: Reddit Gossip", "status": "active", "version": "2.3"},
+        {"name": "Proactive: Kidhar Ho Detector", "status": "active", "version": "2.3"},
+        {"name": "Proactive: Music Recommendations", "status": "active", "version": "2.3"},
+        {"name": "Proactive: Random Thoughts", "status": "active", "version": "2.3"},
+        {"name": "Web Search (DuckDuckGo + Reddit)", "status": "active", "version": "2.5"},
     ]
 
-    return jsonify({
-        "sifra_version": VERSION,
-        "build_date": BUILD_DATE,
-        "modules": module_status,
-        "env_vars": env_vars,
-        "database": {"connection": db_status, "tables": db_tables},
-        "features": features,
-        "total_features": len(features),
-    }), 200
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SIFRA:MIND | Deployment Status</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+            :root {
+                --primary: #2563eb;
+                --bg: #0f172a;
+                --card-bg: rgba(30, 41, 59, 0.7);
+                --border: rgba(51, 65, 85, 0.5);
+                --text-main: #f8fafc;
+                --text-dim: #94a3b8;
+                --success: #10b981;
+                --error: #ef4444;
+            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+                font-family: 'Inter', sans-serif; 
+                background-color: var(--bg); 
+                color: var(--text-main); 
+                line-height: 1.625;
+                padding: 48px 24px;
+            }
+            .container { max-width: 1024px; mx-auto; margin: 0 auto; }
+            
+            header { margin-bottom: 64px; border-left: 4px solid var(--primary); padding-left: 24px; }
+            h1 { font-size: 48px; font-weight: 700; tracking-tight: -0.025em; margin-bottom: 8px; }
+            .subtitle { font-size: 18px; color: var(--text-dim); }
+
+            .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 48px; }
+            
+            .card { 
+                background: var(--card-bg); 
+                backdrop-filter: blur(12px); 
+                border: 1px solid var(--border); 
+                border-radius: 16px; 
+                padding: 24px;
+                transition: transform 0.2s, box-shadow 0.2s;
+            }
+            .card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+            
+            h2 { font-size: 20px; font-weight: 600; margin-bottom: 24px; display: flex; align-items: center; gap: 8px; }
+            
+            .status-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 14px; }
+            .status-label { color: var(--text-dim); }
+            .status-val { font-weight: 500; font-family: monospace; }
+            
+            .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+            .badge-success { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); }
+            .badge-error { background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid var(--error); }
+
+            .feature-list { display: grid; grid-template-columns: 1fr; gap: 12px; }
+            .feature-item { 
+                display: flex; justify-content: space-between; align-items: center; 
+                padding: 12px 16px; background: rgba(255,255,255,0.03); 
+                border-radius: 12px; font-size: 14px;
+            }
+            .feature-name { font-weight: 500; }
+            .feature-version { font-size: 12px; color: var(--text-dim); }
+
+            .tag { font-size: 12px; font-family: monospace; color: var(--primary); font-weight: 600; }
+            
+            @media (max-width: 640px) {
+                h1 { font-size: 32px; }
+                body { padding: 24px 16px; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <div class="tag">BACKEND v{version}</div>
+                <h1>SIFRA:MIND</h1>
+                <p class="subtitle">Real-time deployment status & health dashboard</p>
+            </header>
+
+            <div class="grid">
+                <!-- System Health -->
+                <div class="card">
+                    <h2>⚙️ System Health</h2>
+                    <div class="status-item">
+                        <span class="status-label">Database</span>
+                        <span class="status-val {db_class}">{db_conn}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Build Date</span>
+                        <span class="status-val">{build_date}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Environment</span>
+                        <span class="status-val badge badge-success">Production</span>
+                    </div>
+                </div>
+
+                <!-- Env Vars -->
+                <div class="card">
+                    <h2>🔑 Environment Vars</h2>
+                    {env_html}
+                </div>
+            </div>
+
+            <!-- Modules -->
+            <div class="card" style="margin-bottom: 24px;">
+                <h2>📦 Internal Modules</h2>
+                <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 0;">
+                    {module_html}
+                </div>
+            </div>
+
+            <!-- Features -->
+            <div class="card">
+                <h2>✨ Active Features</h2>
+                <div class="feature-list" style="grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); display: grid;">
+                    {feature_html}
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    # Helper to build HTML snippets
+    env_html = ""
+    for env, val in env_vars.items():
+        status = '<span class="badge badge-success">Set</span>' if val else '<span class="badge badge-error">Missing</span>'
+        env_html += f'<div class="status-item"><span class="status-label">{env}</span>{status}</div>'
+    
+    module_html = ""
+    for mod, data in module_status.items():
+        loaded = "✅" in data['status']
+        status = '<span class="badge badge-success">Loaded</span>' if loaded else '<span class="badge badge-error">Error</span>'
+        module_html += f'<div style="text-align: center; border: 1px solid var(--border); padding: 16px; border-radius: 12px; background: rgba(0,0,0,0.1);"><div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">{mod}</div>{status}</div>'
+
+    feature_html = ""
+    for f in features:
+        feature_html += f'<div class="feature-item"><div class="feature-name">{f["name"]} <span class="feature-version">v{f["version"]}</span></div><span class="badge badge-success">Online</span></div>'
+
+    db_class = "success" if "connected" in db_status else "error"
+    
+    return html_template.format(
+        version=VERSION,
+        build_date=BUILD_DATE,
+        db_conn=db_status.split("error")[0].strip(),
+        db_class=db_class,
+        env_html=env_html,
+        module_html=module_html,
+        feature_html=feature_html
+    ), 200
 
 @app.route("/api/debug", methods=["GET"])
 def api_debug():
