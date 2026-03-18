@@ -49,7 +49,7 @@ export default function StatusBar({ memoryCount, conversationCount, state }) {
               animate={{ opacity: [0.4, 1, 0.4] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
               className="w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: isOnline ? '#00ff9d' : '#ff3c78' }}
+              style={{ backgroundColor: isOnline ? '#ff6a00' : '#52525b' }}
             />
             <span className="text-[10px] text-[var(--color-text-muted)] tracking-widest uppercase mt-0.5">
               {isOnline ? 'system operational' : 'offline'}
