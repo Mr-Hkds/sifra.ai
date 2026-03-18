@@ -329,7 +329,7 @@ def api_status():
                 <h1 class="text-4xl md:text-5xl font-semibold tracking-tighter text-zinc-100">SIFRA:MIND</h1>
                 <div class="flex items-center gap-6 mt-2">
                     <div class="flex items-center gap-2">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
+                        <span class="w-1.5 h-1.5 rounded-full bg-orange-500 pulse-dot"></span>
                         <span class="font-mono text-xs text-zinc-400">All systems operational</span>
                     </div>
                     <span class="font-mono text-xs text-zinc-600">v{version}</span>
@@ -415,7 +415,7 @@ def api_status():
     """
 
     # Ultra-minimalist UI components - zero rounding on badges, raw text colors
-    success_text = '<span class="font-mono text-[10px] text-emerald-400 tracking-widest">OK</span>'
+    success_text = '<span class="font-mono text-[10px] text-orange-500 tracking-widest">OK</span>'
     error_text = '<span class="font-mono text-[10px] text-zinc-500 tracking-widest">ERR</span>'
     
     env_html = ""
@@ -426,7 +426,7 @@ def api_status():
     module_html = ""
     for mod, data in module_status.items():
         loaded = "✅" in data['status']
-        status_dot = '<span class="w-1.5 h-1.5 bg-emerald-500"></span>' if loaded else '<span class="w-1.5 h-1.5 bg-zinc-600"></span>'
+        status_dot = '<span class="w-1.5 h-1.5 bg-orange-500"></span>' if loaded else '<span class="w-1.5 h-1.5 bg-zinc-600"></span>'
         text_color = 'text-zinc-200' if loaded else 'text-zinc-500'
         module_html += f'<div class="flex flex-col p-4 border border-zinc-800/40 bg-zinc-900/10 hover:bg-zinc-900/40 transition-colors"><div class="flex items-center gap-3 mb-2">{status_dot}<span class="font-mono text-xs {text_color} tracking-tight">{mod}</span></div><p class="font-sans text-xs text-zinc-500 leading-relaxed">{data["description"]}</p></div>'
 
@@ -434,7 +434,7 @@ def api_status():
     for f in features:
         feature_html += f'<div class="flex justify-between items-baseline border-b border-zinc-800/30 py-2 group"><div class="flex items-center gap-3"><span class="text-zinc-700 group-hover:text-zinc-500 transition-colors">▶</span><span class="font-sans text-sm font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors">{f["name"]}</span></div><span class="font-mono text-[10px] text-zinc-600">v{f["version"]}</span></div>'
 
-    db_class = "text-emerald-400" if "connected" in db_status else "text-zinc-500"
+    db_class = "text-orange-500" if "connected" in db_status else "text-zinc-500"
     
     
     # Use .replace instead of .format to avoid CSS brace conflicts
