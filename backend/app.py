@@ -191,6 +191,92 @@ def api_proactive():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/status", methods=["GET"])
+def api_status():
+    """
+    Deployment status page — shows all features, their health,
+    env vars, and latest update info.
+    """
+    import importlib, sys
+
+    VERSION = "2.5.0"
+    BUILD_DATE = "2026-03-18"
+
+    # Check modules
+    modules = {
+        "sifra_brain": "Core AI Brain (prompt + response)",
+        "peek_context": "Context Signals (time, energy, mood, location)",
+        "mesh_memory": "Memory System (extract, store, recall, decay)",
+        "telegram_handler": "Telegram Integration (webhook + send)",
+        "proactive": "Proactive Messaging (greetings, gossip, kidhar ho)",
+        "web_search": "Web Search (DuckDuckGo + Reddit)",
+        "supabase_client": "Database Client (Supabase)",
+        "scheduler": "Scheduler (APScheduler)",
+    }
+    module_status = {}
+    for mod_name, desc in modules.items():
+        try:
+            importlib.import_module(mod_name)
+            module_status[mod_name] = {"status": "✅ loaded", "description": desc}
+        except Exception as e:
+            module_status[mod_name] = {"status": f"❌ error: {str(e)[:80]}", "description": desc}
+
+    # Check env vars
+    env_vars = {
+        "GROQ_API_KEY": bool(os.environ.get("GROQ_API_KEY")),
+        "TELEGRAM_BOT_TOKEN": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
+        "SUPABASE_URL": bool(os.environ.get("SUPABASE_URL")),
+        "SUPABASE_KEY": bool(os.environ.get("SUPABASE_KEY")),
+        "WEBHOOK_SECRET": bool(os.environ.get("WEBHOOK_SECRET")),
+        "USER_TELEGRAM_ID": bool(os.environ.get("USER_TELEGRAM_ID")),
+        "NEWS_API_KEY": bool(os.environ.get("NEWS_API_KEY")),
+    }
+
+    # Check database connection
+    db_status = "❌ not connected"
+    db_tables = {}
+    try:
+        from supabase_client import get_client
+        client = get_client()
+        for table in ["conversations", "memories", "sifra_state", "proactive_queue"]:
+            try:
+                result = client.table(table).select("id").limit(1).execute()
+                db_tables[table] = f"✅ accessible ({len(result.data)} rows sampled)"
+            except Exception as e:
+                db_tables[table] = f"❌ error: {str(e)[:60]}"
+        db_status = "✅ connected"
+    except Exception as e:
+        db_status = f"❌ error: {str(e)[:80]}"
+
+    # Feature checklist
+    features = [
+        {"name": "Telegram Bot", "status": "✅ active", "version": "1.0"},
+        {"name": "Memory System", "status": "✅ active", "version": "1.0"},
+        {"name": "Context Signals (IST Time + Location)", "status": "✅ active", "version": "2.0"},
+        {"name": "Core Rules (Secret Element)", "status": "✅ active", "version": "2.0"},
+        {"name": "Anti-Hallucination Guards", "status": "✅ active", "version": "2.1"},
+        {"name": "Graceful Deflection (calls/photos/meet)", "status": "✅ active", "version": "2.1"},
+        {"name": "Energy Matching (typing style)", "status": "✅ active", "version": "2.2"},
+        {"name": "Vent Mode", "status": "✅ active", "version": "2.2"},
+        {"name": "Hyped Mode", "status": "✅ active", "version": "2.2"},
+        {"name": "Proactive: Good Morning/Night", "status": "✅ active", "version": "2.3"},
+        {"name": "Proactive: Reddit Gossip", "status": "✅ active", "version": "2.3"},
+        {"name": "Proactive: Kidhar Ho Detector", "status": "✅ active", "version": "2.3"},
+        {"name": "Proactive: Music Recommendations", "status": "✅ active", "version": "2.3"},
+        {"name": "Proactive: Random Thoughts", "status": "✅ active", "version": "2.3"},
+        {"name": "Web Search (DuckDuckGo + Reddit)", "status": "✅ active", "version": "2.5"},
+    ]
+
+    return jsonify({
+        "sifra_version": VERSION,
+        "build_date": BUILD_DATE,
+        "modules": module_status,
+        "env_vars": env_vars,
+        "database": {"connection": db_status, "tables": db_tables},
+        "features": features,
+        "total_features": len(features),
+    }), 200
+
 @app.route("/api/debug", methods=["GET"])
 def api_debug():
     """Diagnostic endpoint to check env vars and connection."""

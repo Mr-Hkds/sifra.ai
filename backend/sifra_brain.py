@@ -198,10 +198,21 @@ def detect_mood(message: str, recent_context: str = "") -> str:
 def generate_response(user_message: str, peek_context: dict) -> str:
     """
     Generate Sifra's response to a user message.
-    Builds full context prompt, calls Groq, returns reply text.
+    Builds full context prompt, optionally searches the web, calls Groq.
     """
     try:
         system_prompt = build_system_prompt(peek_context)
+
+        # Check if user's message needs a web search
+        try:
+            from web_search import should_search, search_web
+            if should_search(user_message):
+                search_results = search_web(user_message)
+                if search_results:
+                    system_prompt += f"\n\n{search_results}"
+        except Exception as e:
+            logger.error(f"Web search integration error: {e}")
+
         client = _get_groq_client()
 
         response = client.chat.completions.create(
@@ -217,7 +228,7 @@ def generate_response(user_message: str, peek_context: dict) -> str:
 
         reply = response.choices[0].message.content.strip()
 
-        # Update Sifra's mood based on interaction (simple heuristic)
+        # Update Sifra's mood based on interaction
         _update_sifra_mood_from_context(peek_context)
 
         return reply
