@@ -1,11 +1,13 @@
 """
 Telegram webhook handler — processes incoming messages,
 orchestrates the full pipeline: context → memory → response → save.
+Includes sticker/GIF support for more human-like interactions.
 """
 
 import os
 import json
 import re
+import random
 import logging
 import threading
 import requests
@@ -26,6 +28,24 @@ TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 # Core Rules trigger pattern (case-insensitive)
 CORE_RULES_PATTERN = re.compile(r"sifra,?\s*update\s+core\s+rules?:\s*(.+)", re.IGNORECASE | re.DOTALL)
 
+# GIPHY free API key (public beta key — rate limited but works)
+GIPHY_API_KEY = os.environ.get("GIPHY_API_KEY", "GlVGYHkr3WSBnllca54iNt0yFbjz7L65")
+
+# GIF search keywords based on mood/context
+MOOD_GIF_KEYWORDS = {
+    "happy": ["happy dance", "celebration", "excited", "yaay", "party"],
+    "excited": ["omg excited", "celebration dance", "cant wait", "woohoo"],
+    "sad": ["sad hug", "comfort hug", "there there", "sad rain"],
+    "stressed": ["stressed out", "deep breath", "calm down", "its okay"],
+    "bored": ["bored af", "so bored", "yawn", "nothing to do"],
+    "playful": ["lol funny", "haha", "rofl", "cheeky", "teasing"],
+    "neutral": ["hi wave", "thinking", "hmm", "curious"],
+    "angry": ["angry", "frustrated", "ugh", "annoyed"],
+    "tired": ["sleepy", "yawn tired", "exhausted", "need sleep"],
+    "venting": ["hug comfort", "listening", "im here", "support"],
+    "hyped": ["lets go", "hyped", "fire", "excited dance", "wooo"],
+}
+
 
 def send_telegram_message(chat_id: int | str, text: str) -> bool:
     """Send a message via Telegram Bot API."""
@@ -41,6 +61,81 @@ def send_telegram_message(chat_id: int | str, text: str) -> bool:
     except Exception as e:
         logger.error(f"send_telegram_message failed: {e}")
         return False
+
+
+def send_telegram_gif(chat_id: int | str, gif_url: str) -> bool:
+    """Send a GIF via Telegram Bot API."""
+    try:
+        url = f"{TELEGRAM_API}/sendAnimation"
+        payload = {"chat_id": chat_id, "animation": gif_url}
+        resp = requests.post(url, json=payload, timeout=10)
+        return resp.status_code == 200
+    except Exception as e:
+        logger.error(f"send_telegram_gif failed: {e}")
+        return False
+
+
+def send_telegram_sticker(chat_id: int | str, sticker_id: str) -> bool:
+    """Send a sticker via Telegram Bot API."""
+    try:
+        url = f"{TELEGRAM_API}/sendSticker"
+        payload = {"chat_id": chat_id, "sticker": sticker_id}
+        resp = requests.post(url, json=payload, timeout=10)
+        return resp.status_code == 200
+    except Exception as e:
+        logger.error(f"send_telegram_sticker failed: {e}")
+        return False
+
+
+def _search_giphy(query: str) -> str | None:
+    """Search GIPHY for a relevant GIF. Returns GIF URL or None."""
+    try:
+        resp = requests.get(
+            "https://api.giphy.com/v1/gifs/search",
+            params={
+                "api_key": GIPHY_API_KEY,
+                "q": query,
+                "limit": 10,
+                "rating": "pg-13",
+                "lang": "en",
+            },
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            return None
+        gifs = resp.json().get("data", [])
+        if not gifs:
+            return None
+        gif = random.choice(gifs)
+        return gif.get("images", {}).get("fixed_height", {}).get("url")
+    except Exception as e:
+        logger.error(f"GIPHY search failed: {e}")
+        return None
+
+
+def _maybe_send_gif(chat_id: int | str, mood: str, personality_mode: str) -> None:
+    """
+    Randomly send a relevant GIF/sticker after Sifra's text reply.
+    30% chance on playful/hyped moods, 15% on others.
+    Never sends during vent/quiet modes (respect the vibe).
+    """
+    # Don't send GIFs during serious moments
+    if personality_mode in ("vent", "quiet", "late_night"):
+        return
+
+    # Higher chance for fun moods
+    chance = 0.30 if personality_mode in ("playful", "hyped") else 0.15
+    if random.random() > chance:
+        return
+
+    # Pick a search keyword based on mood
+    keywords = MOOD_GIF_KEYWORDS.get(mood, MOOD_GIF_KEYWORDS["neutral"])
+    query = random.choice(keywords)
+
+    gif_url = _search_giphy(query)
+    if gif_url:
+        send_telegram_gif(chat_id, gif_url)
+        logger.info(f"Sent GIF for mood={mood}, query={query}")
 
 
 def _run_memory_extraction_async(user_message: str, sifra_context: str) -> None:
@@ -139,8 +234,10 @@ def process_telegram_update(update: dict) -> dict:
         # Step 5: Send reply via Telegram
         send_telegram_message(chat_id, reply)
 
-        # Step 6: Run memory extraction async — ONLY from user message
-        # Pass Sifra's recent replies as read-only context (not for extraction)
+        # Step 6: Maybe send a fun GIF/sticker (contextual, random chance)
+        _maybe_send_gif(chat_id, mood, context.get("personality_mode", "normal"))
+
+        # Step 7: Run memory extraction async — ONLY from user message
         sifra_context = _get_recent_context_str()
         thread = threading.Thread(
             target=_run_memory_extraction_async,
@@ -149,7 +246,7 @@ def process_telegram_update(update: dict) -> dict:
         )
         thread.start()
 
-        # Step 7: Update sifra_state
+        # Step 8: Update sifra_state
         update_sifra_state({
             "current_mood": context.get("mood_signal", "neutral"),
             "personality_mode": context.get("personality_mode", "normal"),
