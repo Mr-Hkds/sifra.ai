@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 /**
  * PulseLine — animated EKG/heartbeat line that reacts to Sifra's mood.

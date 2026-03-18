@@ -1,3 +1,4 @@
+import React from 'react';
 import NeuralHeader from './components/NeuralHeader';
 import MemoryCore from './components/MemoryCore';
 import LiveFeed from './components/LiveFeed';

@@ -1,3 +1,4 @@
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Cpu, MessageSquare, Database, Clock } from 'lucide-react';
 

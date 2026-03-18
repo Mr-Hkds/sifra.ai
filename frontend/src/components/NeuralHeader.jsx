@@ -1,3 +1,4 @@
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Brain, Zap, Clock, Activity } from 'lucide-react';
 import PulseLine from './PulseLine';
