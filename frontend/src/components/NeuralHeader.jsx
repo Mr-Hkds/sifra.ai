@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Brain, Zap, Clock, Activity } from 'lucide-react';
-import { Brain, Zap, Clock, Activity } from 'lucide-react';
+
 
 /**
  * NeuralHeader — the top bar of SIFRA:MIND
