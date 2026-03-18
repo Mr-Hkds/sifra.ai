@@ -308,6 +308,7 @@ def get_sifra_state() -> dict:
         "active_memories": [],
         "today_summary": "",
         "personality_mode": "normal",
+        "core_rules": "",
     }
 
 

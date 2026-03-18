@@ -23,25 +23,31 @@ logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
-EXTRACTION_PROMPT = """You are a memory extraction system.
-Read the following conversation message from the user and extract any facts, preferences, emotions, habits, or events worth remembering about them.
+EXTRACTION_PROMPT = """You are a memory extraction system for a personal AI companion.
+Your job: Read the USER'S message below and extract facts about THEM (the user, Harkamal).
+
+CRITICAL RULES:
+- ONLY extract information about the USER (Harkamal).
+- NEVER extract or save anything Sifra (the AI) said. The "Recent context" section includes Sifra's replies — ignore those completely for extraction.
+- Focus on what the user reveals about themselves: their life, feelings, plans, preferences, habits, opinions.
+- Also notice their communication style: do they use short messages? emojis? Hinglish? formal English? This helps understand them better.
 
 Return a JSON array of memory objects. Each object must have:
 - "content": string (the memory, written as a fact about the user — e.g. "He stays up till 3am coding")
 - "category": one of "core", "emotional", "habit", "preference", "event"
-  - core = identity facts (name, age, job, location)
-  - emotional = feelings, emotional events, reactions
-  - habit = behavioral patterns, routines
-  - preference = likes, dislikes, opinions
-  - event = specific one-time events or plans
+  - core = identity facts (name, age, job, location, relationships)
+  - emotional = feelings, emotional events, reactions, moods
+  - habit = behavioral patterns, routines, communication patterns
+  - preference = likes, dislikes, opinions, things they want to avoid
+  - event = specific one-time events, plans, or news they shared
 - "importance": integer 1-10 (how significant this is to remember long-term)
 
-If there is nothing worth remembering, return an empty JSON array: []
+If there is nothing worth remembering about the USER, return an empty JSON array: []
 
 USER MESSAGE:
 {message}
 
-RECENT CONTEXT (for reference):
+RECENT CONTEXT (read-only reference, do NOT extract from Sifra's replies here):
 {context}
 
 Return ONLY the JSON array. No explanation. No markdown fencing."""

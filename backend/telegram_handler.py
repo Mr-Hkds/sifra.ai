@@ -5,6 +5,7 @@ orchestrates the full pipeline: context → memory → response → save.
 
 import os
 import json
+import re
 import logging
 import threading
 import requests
@@ -21,6 +22,9 @@ USER_TELEGRAM_ID = os.environ.get("USER_TELEGRAM_ID", "")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+
+# Core Rules trigger pattern (case-insensitive)
+CORE_RULES_PATTERN = re.compile(r"sifra,?\s*update\s+core\s+rules?:\s*(.+)", re.IGNORECASE | re.DOTALL)
 
 
 def send_telegram_message(chat_id: int | str, text: str) -> bool:
@@ -39,14 +43,41 @@ def send_telegram_message(chat_id: int | str, text: str) -> bool:
         return False
 
 
-def _run_memory_extraction_async(user_message: str, recent_context: str) -> None:
-    """Run memory extraction in a background thread so it doesn't block the response."""
+def _run_memory_extraction_async(user_message: str, sifra_context: str) -> None:
+    """
+    Run memory extraction in a background thread.
+    IMPORTANT: Only extracts from user_message. sifra_context is read-only
+    reference so the extractor understands the conversation flow.
+    """
     try:
-        count = process_memory_extraction(user_message, recent_context)
+        count = process_memory_extraction(user_message, sifra_context)
         if count > 0:
-            logger.info(f"Extracted {count} memories from message")
+            logger.info(f"Extracted {count} memories from user message")
     except Exception as e:
         logger.error(f"Async memory extraction failed: {e}")
+
+
+def _handle_core_rules_update(text: str, chat_id: int | str) -> bool:
+    """
+    Check if the message is a Core Rules update command.
+    If yes, save the rules and confirm. Returns True if handled.
+    """
+    match = CORE_RULES_PATTERN.match(text)
+    if not match:
+        return False
+
+    new_rules = match.group(1).strip()
+    try:
+        update_sifra_state({"core_rules": new_rules})
+        confirm = f"✅ Core rules updated. I'll follow these from now on:\n\n\"{new_rules}\""
+        send_telegram_message(chat_id, confirm)
+        save_conversation("user", text, platform="telegram")
+        save_conversation("sifra", confirm, platform="telegram")
+        logger.info(f"Core rules updated: {new_rules[:80]}...")
+    except Exception as e:
+        logger.error(f"Core rules update failed: {e}")
+        send_telegram_message(chat_id, "rules update nahi ho payi yr, try again?")
+    return True
 
 
 def process_telegram_update(update: dict) -> dict:
@@ -83,6 +114,10 @@ def process_telegram_update(update: dict) -> dict:
             save_conversation("sifra", welcome, platform="telegram")
             return {"success": True, "reply": welcome}
 
+        # Handle Core Rules update (secret element)
+        if _handle_core_rules_update(text, chat_id):
+            return {"success": True, "reply": "Core rules updated"}
+
         # Get last message timestamp for gap detection
         recent = get_conversations(limit=1)
         last_ts = recent[0].get("timestamp") if recent else None
@@ -104,11 +139,12 @@ def process_telegram_update(update: dict) -> dict:
         # Step 5: Send reply via Telegram
         send_telegram_message(chat_id, reply)
 
-        # Step 6: Run memory extraction async (don't block response)
-        recent_context_str = _get_recent_context_str()
+        # Step 6: Run memory extraction async — ONLY from user message
+        # Pass Sifra's recent replies as read-only context (not for extraction)
+        sifra_context = _get_recent_context_str()
         thread = threading.Thread(
             target=_run_memory_extraction_async,
-            args=(text, recent_context_str),
+            args=(text, sifra_context),
             daemon=True,
         )
         thread.start()

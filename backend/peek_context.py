@@ -3,8 +3,18 @@ Peek Context System — reads signals from messages and environment
 to determine Sifra's personality mode for the current interaction.
 """
 
+import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+# Default to IST (UTC+5:30) if not specified
+TIMEZONE_OFFSET = float(os.environ.get("TIMEZONE_OFFSET", 5.5))
+USER_LOCATION = os.environ.get("USER_LOCATION", "Delhi, India")
 
 
 # ---------------------------------------------------------------------------
@@ -130,22 +140,18 @@ def build_context(message_text: str, last_message_timestamp: str | None = None) 
     """
     Build the full context object for the Peek system.
 
-    Parameters
-    ----------
-    message_text : str
-        The user's current message.
-    last_message_timestamp : str | None
-        ISO timestamp of the user's previous message (for gap detection).
-
     Returns
     -------
     dict with keys: time, time_label, day, message_length, has_question,
-                    energy_signal, mood_signal, personality_mode, gap_minutes
+                    energy_signal, mood_signal, personality_mode, gap_minutes, location
     """
-    now = datetime.now(timezone.utc)
-    hour = now.hour
+    # Calculate local time based on offset
+    utc_now = datetime.now(timezone.utc)
+    local_now = utc_now + timedelta(hours=TIMEZONE_OFFSET)
+    
+    hour = local_now.hour
     time_label = _get_time_label(hour)
-    day = now.strftime("%A")
+    day = local_now.strftime("%A")
     msg_len = _classify_message_length(message_text)
     question = _has_question(message_text)
     energy = _detect_energy(message_text)
@@ -156,7 +162,7 @@ def build_context(message_text: str, last_message_timestamp: str | None = None) 
     if last_message_timestamp:
         try:
             last_ts = datetime.fromisoformat(last_message_timestamp.replace("Z", "+00:00"))
-            gap_minutes = int((now - last_ts).total_seconds() / 60)
+            gap_minutes = int((utc_now - last_ts).total_seconds() / 60)
         except Exception:
             pass
 
@@ -172,4 +178,5 @@ def build_context(message_text: str, last_message_timestamp: str | None = None) 
         "mood_signal": mood,
         "personality_mode": personality_mode,
         "gap_minutes": gap_minutes,
+        "location": USER_LOCATION,
     }
