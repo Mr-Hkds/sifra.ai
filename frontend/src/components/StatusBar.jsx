@@ -32,17 +32,30 @@ export default function StatusBar({ memoryCount, conversationCount, state }) {
         </div>
 
         {/* Right status */}
-        <div className="flex items-center gap-2">
-          <motion.div
-            animate={{ opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ backgroundColor: isOnline ? '#00ff9d' : '#ff3c78' }}
-          />
-          <span className="text-[10px] text-[var(--color-text-muted)] tracking-widest uppercase">
-            {isOnline ? 'system operational' : 'offline'}
-          </span>
-          <Cpu size={10} className="text-[var(--color-text-muted)] ml-1" />
+        <div className="flex items-center gap-4">
+          <a
+            href="https://sifra-ai-backend.vercel.app/api/status"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-2.5 py-0.5 border border-[#ff7300]/30 bg-[#ff7300]/10 hover:bg-[#ff7300]/20 rounded transition-colors"
+            title="View System Telemetry"
+          >
+            <div className="w-1 h-1 rounded-full bg-[#ff7300] animate-pulse"></div>
+            <span className="text-[9px] text-[#ff7300] font-mono tracking-widest uppercase font-semibold mt-0.5">TELEMETRY</span>
+          </a>
+
+          <div className="flex items-center gap-2 border-l border-[var(--color-border)] pl-4">
+            <motion.div
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: isOnline ? '#00ff9d' : '#ff3c78' }}
+            />
+            <span className="text-[10px] text-[var(--color-text-muted)] tracking-widest uppercase mt-0.5">
+              {isOnline ? 'system operational' : 'offline'}
+            </span>
+            <Cpu size={10} className="text-[var(--color-text-muted)] ml-1" />
+          </div>
         </div>
       </div>
     </footer>
