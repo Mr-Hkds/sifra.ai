@@ -36,10 +36,10 @@ export default function App() {
       {/* ZONE 1 — Neural Header */}
       <NeuralHeader state={state} />
 
-      {/* ZONE 2 — Three Column Grid */}
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] overflow-hidden">
+      {/* ZONE 2 — Spatial Three Column Grid */}
+      <main className="flex-1 max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-[300px_1fr_300px] gap-8 py-8 px-6 overflow-hidden">
         {/* Left — Memory Core */}
-        <div className="border-r border-[var(--color-border)] overflow-hidden">
+        <div className="overflow-hidden flex flex-col bg-[var(--color-bg-card)] rounded-xl border border-[var(--color-border-subtle)]">
           <MemoryCore
             memories={memories}
             onAdd={addMemory}
@@ -48,12 +48,12 @@ export default function App() {
         </div>
 
         {/* Center — Live Feed */}
-        <div className="overflow-hidden border-r border-[var(--color-border)]">
+        <div className="overflow-hidden flex flex-col bg-[var(--color-bg-card)] rounded-xl border border-[var(--color-border-subtle)] shadow-2xl">
           <LiveFeed conversations={conversations} />
         </div>
 
         {/* Right — Signal Analysis */}
-        <div className="overflow-hidden">
+        <div className="overflow-hidden flex flex-col bg-[var(--color-bg-card)] rounded-xl border border-[var(--color-border-subtle)]">
           <SignalAnalysis state={state} />
         </div>
       </main>

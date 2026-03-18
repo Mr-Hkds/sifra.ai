@@ -21,7 +21,7 @@ from supabase_client import (
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 EXTRACTION_PROMPT = """You are a memory extraction system for a personal AI companion.
 Your job: Read the USER'S message below and extract facts about THEM (the user, Harkamal).
