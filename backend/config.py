@@ -94,7 +94,17 @@ OBSERVATION_MAX_LEARNINGS = 50       # Max stored learning patterns
 OBSERVATION_ANALYSIS_TEMPERATURE = 0.35  # Balanced for pattern extraction
 
 # ---------------------------------------------------------------------------
+# Auto-Training Bot (Telethon — direct Rumik conversations)
+# ---------------------------------------------------------------------------
+TELEGRAM_API_ID = int(os.environ.get("TELEGRAM_API_ID", "33754919"))
+TELEGRAM_API_HASH = os.environ.get("TELEGRAM_API_HASH", "cd3ec4b240056a9a1d5655d9971fa07f")
+TELEGRAM_SESSION = os.environ.get("TELEGRAM_SESSION", "")  # StringSession
+TRAINING_MESSAGES_PER_SESSION = 15    # Messages per training run
+TRAINING_RESPONSE_WAIT = 10          # Seconds to wait for Rumik's reply
+TRAINING_COOLDOWN = 3                # Seconds between messages
+
+# ---------------------------------------------------------------------------
 # Version
 # ---------------------------------------------------------------------------
-VERSION = "3.2.0"
+VERSION = "3.3.0"
 BUILD_DATE = "2026-03-19"

@@ -196,6 +196,21 @@ def api_proactive():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/train", methods=["POST"])
+def api_train():
+    """Trigger an automated training session with Rumik."""
+    import threading
+    from training_bot import run_training
+
+    def _run():
+        result = run_training()
+        logger.info(f"Training result: {result}")
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return jsonify({"ok": True, "message": "Training session started in background"}), 200
+
+
 # ===================================================================
 # STATUS & HEALTH
 # ===================================================================

@@ -230,6 +230,7 @@ ADMIN_COMMANDS = {
     "/sifra_clear_mem": "Clear all memories",
     "/sifra_clear_conv": "Clear all conversations",
     "/sifra_learn_status": "Show observation learning stats",
+    "/sifra_train": "Start auto-training with Rumik",
     "/sifra_help": "Show admin commands",
 }
 
@@ -279,8 +280,42 @@ def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
     if cmd == "/sifra_learn_status":
         return _send_learn_status(chat_id)
 
+    if cmd == "/sifra_train":
+        return _start_training(chat_id)
+
     return None
 
+
+def _start_training(chat_id: int | str) -> dict:
+    """Start an auto-training session via admin command."""
+    send_message(chat_id, f"🚀 <b>Starting auto-training session with @{RUMIK_BOT_USERNAME}...</b>\n\nThis will take a few minutes as I generate topics, send them, and wait for responses.")
+
+    import threading
+    from training_bot import run_training
+
+    def _run():
+        result = run_training()
+        if result.get("success"):
+            msg = (
+                f"✅ <b>Training Session Complete!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"<b>Messages Sent:</b> {result.get('messages_sent', 0)}\n"
+                f"<b>Responses Captured:</b> {result.get('responses_captured', 0)}\n"
+                f"<b>Errors:</b> {result.get('errors', 0)}\n\n"
+            )
+            if result.get('learnings_triggered'):
+                msg += "🧠 Batch analysis triggered! Sifra is synthesizing new patterns."
+            else:
+                msg += "Not enough observations for a batch yet."
+        else:
+            err = result.get('error', 'Unknown error')
+            msg = f"❌ <b>Training Failed</b>\n{err}"
+
+        send_message(chat_id, msg)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return {"success": True, "reply": "training started"}
 
 def _send_learn_status(chat_id: int | str) -> dict:
     """Send observation learning stats via Telegram."""
