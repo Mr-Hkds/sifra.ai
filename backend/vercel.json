@@ -34,15 +34,5 @@
       "src": "/",
       "dest": "app.py"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/run_decay",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/proactive",
-      "schedule": "*/30 * * * *"
-    }
   ]
 }
