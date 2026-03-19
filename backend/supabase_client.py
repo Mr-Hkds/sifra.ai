@@ -1,13 +1,18 @@
 """
-Supabase client and all database query helpers for SIFRA:MIND.
-Handles memories, conversations, sifra_state, and proactive_queue tables.
+SIFRA:MIND — Supabase Database Client.
+All database operations: memories, conversations, state, proactive queue.
+Clean, focused, properly error-handled.
 """
 
-import os
-import json
 import logging
 from datetime import datetime, timedelta, timezone
+
 from supabase import create_client, Client
+
+from config import (
+    SUPABASE_URL, SUPABASE_KEY,
+    MEMORY_SIMILARITY_THRESHOLD, MEMORY_DECAY_DAYS, MEMORY_FORGET_THRESHOLD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,14 +20,11 @@ logger = logging.getLogger(__name__)
 # Connection
 # ---------------------------------------------------------------------------
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-
 _client: Client | None = None
 
 
 def get_client() -> Client:
-    """Return a singleton Supabase client."""
+    """Singleton Supabase client."""
     global _client
     if _client is None:
         if not SUPABASE_URL or not SUPABASE_KEY:
@@ -36,7 +38,7 @@ def get_client() -> Client:
 # ===================================================================
 
 def insert_memory(content: str, category: str, importance: int) -> dict | None:
-    """Insert a new memory. Returns the created row or None on error."""
+    """Insert a new memory."""
     try:
         data = {
             "content": content,
@@ -49,14 +51,13 @@ def insert_memory(content: str, category: str, importance: int) -> dict | None:
         result = get_client().table("memories").insert(data).execute()
         return result.data[0] if result.data else None
     except Exception as e:
-        logger.error(f"insert_memory failed: {e}")
+        logger.error(f"insert_memory: {e}")
         return None
 
 
 def find_similar_memory(content: str) -> dict | None:
-    """Fuzzy-match: look for a memory whose content overlaps significantly."""
+    """Find a memory with significant word overlap (deduplication)."""
     try:
-        # Pull all non-forgotten memories and do a simple keyword overlap check
         result = (
             get_client()
             .table("memories")
@@ -76,40 +77,45 @@ def find_similar_memory(content: str) -> dict | None:
             if not words_existing:
                 continue
             overlap = len(words_new & words_existing) / max(len(words_new), len(words_existing))
-            if overlap > 0.6 and overlap > best_score:
+            if overlap > MEMORY_SIMILARITY_THRESHOLD and overlap > best_score:
                 best_score = overlap
                 best_match = mem
 
         return best_match
     except Exception as e:
-        logger.error(f"find_similar_memory failed: {e}")
+        logger.error(f"find_similar_memory: {e}")
         return None
 
 
 def update_memory_reference(memory_id: str, new_importance: int | None = None) -> None:
-    """Bump reference count and timestamp for an existing memory."""
+    """Bump reference count and timestamp for a memory."""
     try:
-        update_data: dict = {
-            "last_referenced": datetime.now(timezone.utc).isoformat(),
-            "times_referenced": get_client()
+        current = (
+            get_client()
             .table("memories")
             .select("times_referenced")
             .eq("id", memory_id)
             .execute()
-            .data[0]["times_referenced"]
-            + 1,
+        )
+        if not current.data:
+            return
+
+        update_data: dict = {
+            "last_referenced": datetime.now(timezone.utc).isoformat(),
+            "times_referenced": current.data[0]["times_referenced"] + 1,
         }
         if new_importance is not None:
             update_data["importance"] = max(1, min(10, new_importance))
+
         get_client().table("memories").update(update_data).eq("id", memory_id).execute()
     except Exception as e:
-        logger.error(f"update_memory_reference failed: {e}")
+        logger.error(f"update_memory_reference: {e}")
 
 
 def get_top_memories(limit: int = 8) -> list[dict]:
     """
-    Fetch top memories ranked by:
-      (importance * 0.5) + (decay_score * 0.3) + (recency * 0.2)
+    Fetch top memories by composite score.
+    Used for proactive messages and spontaneous recall.
     """
     try:
         result = (
@@ -127,28 +133,42 @@ def get_top_memories(limit: int = 8) -> list[dict]:
         def score(mem: dict) -> float:
             imp = (mem.get("importance", 5) / 10.0) * 0.5
             decay = mem.get("decay_score", 1.0) * 0.3
-            # Recency: 1.0 if referenced today, decays towards 0 over 30 days
             last_ref_str = mem.get("last_referenced")
+            recency = 0.5
             if last_ref_str:
                 try:
                     last_ref = datetime.fromisoformat(last_ref_str.replace("Z", "+00:00"))
                     days_ago = (now - last_ref).total_seconds() / 86400
                     recency = max(0.0, 1.0 - days_ago / 30.0)
                 except Exception:
-                    recency = 0.5
-            else:
-                recency = 0.5
-            return imp + decay + (recency * 0.2)
+                    pass
+            return imp + decay + recency * 0.2
 
         ranked = sorted(result.data, key=score, reverse=True)
         return ranked[:limit]
     except Exception as e:
-        logger.error(f"get_top_memories failed: {e}")
+        logger.error(f"get_top_memories: {e}")
+        return []
+
+
+def get_all_active_memories() -> list[dict]:
+    """Return all non-forgotten memories (for context-aware retrieval)."""
+    try:
+        result = (
+            get_client()
+            .table("memories")
+            .select("*")
+            .neq("category", "forget")
+            .execute()
+        )
+        return result.data or []
+    except Exception as e:
+        logger.error(f"get_all_active_memories: {e}")
         return []
 
 
 def get_all_memories(category: str | None = None) -> list[dict]:
-    """Return all non-forgotten memories, optionally filtered by category."""
+    """Return all non-forgotten memories, optionally filtered. For dashboard."""
     try:
         query = get_client().table("memories").select("*").neq("category", "forget")
         if category:
@@ -156,25 +176,25 @@ def get_all_memories(category: str | None = None) -> list[dict]:
         result = query.order("importance", desc=True).execute()
         return result.data or []
     except Exception as e:
-        logger.error(f"get_all_memories failed: {e}")
+        logger.error(f"get_all_memories: {e}")
         return []
 
 
 def delete_memory(memory_id: str) -> bool:
+    """Delete a memory by ID."""
     try:
         get_client().table("memories").delete().eq("id", memory_id).execute()
         return True
     except Exception as e:
-        logger.error(f"delete_memory failed: {e}")
+        logger.error(f"delete_memory: {e}")
         return False
 
 
 def decay_memories() -> int:
     """
-    Run the daily decay pass.
+    Daily decay pass.
     - Decrease decay_score by 0.05 for memories not referenced in 7+ days
-    - Archive (category='forget') if decay < 0.2 AND category != 'core'
-    Returns count of affected memories.
+    - Archive (category='forget') if decay < threshold AND not core
     """
     try:
         result = (
@@ -188,7 +208,7 @@ def decay_memories() -> int:
             return 0
 
         now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(days=7)
+        cutoff = now - timedelta(days=MEMORY_DECAY_DAYS)
         affected = 0
 
         for mem in result.data:
@@ -205,7 +225,7 @@ def decay_memories() -> int:
                 new_decay = max(0.0, mem.get("decay_score", 1.0) - 0.05)
                 update_data: dict = {"decay_score": new_decay}
 
-                if new_decay < 0.2 and mem.get("category") != "core":
+                if new_decay < MEMORY_FORGET_THRESHOLD and mem.get("category") != "core":
                     update_data["category"] = "forget"
 
                 get_client().table("memories").update(update_data).eq("id", mem["id"]).execute()
@@ -213,7 +233,7 @@ def decay_memories() -> int:
 
         return affected
     except Exception as e:
-        logger.error(f"decay_memories failed: {e}")
+        logger.error(f"decay_memories: {e}")
         return 0
 
 
@@ -221,7 +241,13 @@ def decay_memories() -> int:
 # CONVERSATIONS
 # ===================================================================
 
-def save_conversation(role: str, content: str, mood_detected: str = "", platform: str = "telegram") -> dict | None:
+def save_conversation(
+    role: str,
+    content: str,
+    mood_detected: str = "",
+    platform: str = "telegram",
+) -> dict | None:
+    """Save a message to conversation history."""
     try:
         data = {
             "role": role,
@@ -232,11 +258,12 @@ def save_conversation(role: str, content: str, mood_detected: str = "", platform
         result = get_client().table("conversations").insert(data).execute()
         return result.data[0] if result.data else None
     except Exception as e:
-        logger.error(f"save_conversation failed: {e}")
+        logger.error(f"save_conversation: {e}")
         return None
 
 
 def get_conversations(limit: int = 50) -> list[dict]:
+    """Fetch recent conversations in chronological order."""
     try:
         result = (
             get_client()
@@ -247,15 +274,15 @@ def get_conversations(limit: int = 50) -> list[dict]:
             .execute()
         )
         rows = result.data or []
-        rows.reverse()  # chronological order
+        rows.reverse()  # chronological
         return rows
     except Exception as e:
-        logger.error(f"get_conversations failed: {e}")
+        logger.error(f"get_conversations: {e}")
         return []
 
 
 def get_mood_history(days: int = 7) -> list[dict]:
-    """Return mood counts grouped by day for the last N days."""
+    """Return mood counts grouped by day."""
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         result = (
@@ -270,11 +297,10 @@ def get_mood_history(days: int = 7) -> list[dict]:
         if not result.data:
             return []
 
-        # Group by date
         day_moods: dict[str, dict[str, int]] = {}
         for row in result.data:
             try:
-                day = row["timestamp"][:10]  # YYYY-MM-DD
+                day = row["timestamp"][:10]
             except Exception:
                 continue
             mood = row.get("mood_detected", "neutral")
@@ -284,7 +310,7 @@ def get_mood_history(days: int = 7) -> list[dict]:
 
         return [{"date": d, "moods": m} for d, m in sorted(day_moods.items())]
     except Exception as e:
-        logger.error(f"get_mood_history failed: {e}")
+        logger.error(f"get_mood_history: {e}")
         return []
 
 
@@ -293,13 +319,13 @@ def get_mood_history(days: int = 7) -> list[dict]:
 # ===================================================================
 
 def get_sifra_state() -> dict:
-    """Return the single sifra_state row (or sensible defaults)."""
+    """Return Sifra's current state or sensible defaults."""
     try:
         result = get_client().table("sifra_state").select("*").limit(1).execute()
         if result.data:
             return result.data[0]
     except Exception as e:
-        logger.error(f"get_sifra_state failed: {e}")
+        logger.error(f"get_sifra_state: {e}")
 
     return {
         "current_mood": "neutral",
@@ -313,7 +339,7 @@ def get_sifra_state() -> dict:
 
 
 def update_sifra_state(updates: dict) -> None:
-    """Upsert the single sifra_state row."""
+    """Upsert Sifra's state."""
     try:
         updates["last_active"] = datetime.now(timezone.utc).isoformat()
         existing = get_client().table("sifra_state").select("id").limit(1).execute()
@@ -322,7 +348,7 @@ def update_sifra_state(updates: dict) -> None:
         else:
             get_client().table("sifra_state").insert(updates).execute()
     except Exception as e:
-        logger.error(f"update_sifra_state failed: {e}")
+        logger.error(f"update_sifra_state: {e}")
 
 
 # ===================================================================
@@ -330,7 +356,7 @@ def update_sifra_state(updates: dict) -> None:
 # ===================================================================
 
 def get_pending_proactive_messages() -> list[dict]:
-    """Get unsent proactive messages whose scheduled_for has passed."""
+    """Get unsent proactive messages that are due."""
     try:
         now = datetime.now(timezone.utc).isoformat()
         result = (
@@ -344,24 +370,13 @@ def get_pending_proactive_messages() -> list[dict]:
         )
         return result.data or []
     except Exception as e:
-        logger.error(f"get_pending_proactive_messages failed: {e}")
+        logger.error(f"get_pending_proactive_messages: {e}")
         return []
 
 
 def mark_proactive_sent(message_id: str) -> None:
+    """Mark a proactive message as sent."""
     try:
         get_client().table("proactive_queue").update({"sent": True}).eq("id", message_id).execute()
     except Exception as e:
-        logger.error(f"mark_proactive_sent failed: {e}")
-
-
-def add_proactive_message(message: str, scheduled_for: str, trigger_type: str = "time_based") -> None:
-    try:
-        get_client().table("proactive_queue").insert({
-            "message": message,
-            "scheduled_for": scheduled_for,
-            "sent": False,
-            "trigger_type": trigger_type,
-        }).execute()
-    except Exception as e:
-        logger.error(f"add_proactive_message failed: {e}")
+        logger.error(f"mark_proactive_sent: {e}")

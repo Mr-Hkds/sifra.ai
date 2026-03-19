@@ -1,7 +1,7 @@
 """
-Web Search Module — Gives Sifra the ability to search the web.
-Uses DuckDuckGo Instant Answer API (free, no key needed).
-Falls back to generating from knowledge if search fails.
+SIFRA:MIND — Web Search Module.
+Gives Sifra the ability to search the web and share findings naturally.
+Uses DuckDuckGo (free, no key) + Reddit (free, no key).
 """
 
 import re
@@ -11,10 +11,45 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Search Triggers — when should Sifra search?
+# ---------------------------------------------------------------------------
+
+SEARCH_TRIGGERS = [
+    "search", "look up", "find out", "google", "check online",
+    "what's happening", "latest news", "trending",
+    "kya chal raha", "kya ho raha", "news", "khabar",
+    "suggest me", "recommend", "batao koi", "dhundh",
+    "movie suggest", "song suggest", "gaana", "film",
+    "who is", "what is", "kaun hai", "kya hai",
+    "tell me about", "batao", "explain",
+]
+
+CURRENT_EVENT_PATTERN = re.compile(
+    r"\b(latest|recent|new|current|today|aaj|abhi|trending)\b", re.IGNORECASE
+)
+
+
+def should_search(message: str) -> bool:
+    """Detect if the user's message would benefit from a web search."""
+    lower = message.lower()
+
+    if any(trigger in lower for trigger in SEARCH_TRIGGERS):
+        return True
+
+    if CURRENT_EVENT_PATTERN.search(lower) and "?" in message:
+        return True
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Search Providers
+# ---------------------------------------------------------------------------
+
 def _search_duckduckgo(query: str) -> list[dict]:
-    """Search DuckDuckGo and return relevant results."""
+    """DuckDuckGo Instant Answer API — free, no key needed."""
     try:
-        # DDG Instant Answer API
         resp = requests.get(
             "https://api.duckduckgo.com/",
             params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
@@ -26,20 +61,18 @@ def _search_duckduckgo(query: str) -> list[dict]:
         data = resp.json()
         results = []
 
-        # Abstract (main answer)
         if data.get("AbstractText"):
             results.append({
                 "title": data.get("Heading", ""),
-                "text": data["AbstractText"][:300],
-                "source": data.get("AbstractSource", ""),
+                "text": data["AbstractText"][:400],
+                "source": data.get("AbstractSource", "DuckDuckGo"),
             })
 
-        # Related topics
         for topic in data.get("RelatedTopics", [])[:3]:
             if isinstance(topic, dict) and topic.get("Text"):
                 results.append({
                     "title": topic.get("FirstURL", "").split("/")[-1].replace("_", " "),
-                    "text": topic["Text"][:200],
+                    "text": topic["Text"][:250],
                     "source": "DuckDuckGo",
                 })
 
@@ -49,13 +82,14 @@ def _search_duckduckgo(query: str) -> list[dict]:
         return []
 
 
-def _search_reddit_for_topic(query: str) -> list[dict]:
-    """Search Reddit for discussions about a topic."""
+def _search_reddit(query: str) -> list[dict]:
+    """Reddit search for community discussions."""
     try:
-        headers = {"User-Agent": "SifraMind/1.0"}
         resp = requests.get(
-            f"https://www.reddit.com/search.json?q={query}&limit=5&sort=relevance",
-            headers=headers, timeout=8,
+            f"https://www.reddit.com/search.json",
+            params={"q": query, "limit": 5, "sort": "relevance"},
+            headers={"User-Agent": "SifraMind/3.0"},
+            timeout=8,
         )
         if resp.status_code != 200:
             return []
@@ -65,7 +99,7 @@ def _search_reddit_for_topic(query: str) -> list[dict]:
         for post in posts[:3]:
             d = post.get("data", {})
             title = d.get("title", "")
-            selftext = d.get("selftext", "")[:200]
+            selftext = d.get("selftext", "")[:250]
             sub = d.get("subreddit", "")
             score = d.get("score", 0)
             if title and score > 10:
@@ -80,54 +114,25 @@ def _search_reddit_for_topic(query: str) -> list[dict]:
         return []
 
 
-def should_search(message: str) -> bool:
-    """Detect if the user's message needs a web search."""
-    lower = message.lower()
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
-    # Explicit search triggers
-    search_triggers = [
-        "search", "look up", "find out", "google", "check online",
-        "what's happening", "latest news", "trending",
-        "kya chal raha", "kya ho raha", "news", "khabar",
-        "suggest me", "recommend", "batao koi", "dhundh",
-        "movie suggest", "song suggest", "gaana", "film",
-        "who is", "what is", "kaun hai", "kya hai",
-    ]
-
-    if any(trigger in lower for trigger in search_triggers):
-        return True
-
-    # Questions about current events / real-world stuff
-    if re.search(r"\b(latest|recent|new|current|today|aaj|abhi)\b", lower) and "?" in message:
-        return True
-
-    return False
-
-
-def search_web(query: str) -> str | None:
+def search(query: str) -> str | None:
     """
-    Search the web for a query and return formatted results.
-    Returns a formatted string for injection into Sifra's context,
-    or None if nothing useful found.
+    Search the web and return formatted results for injection into Sifra's context.
+    Returns a formatted string or None if nothing found.
     """
-    # Clean query for search
     clean_query = re.sub(r"[?!.,]", "", query).strip()
 
-    # Try DuckDuckGo first
     results = _search_duckduckgo(clean_query)
-
-    # Also try Reddit for community discussions
-    reddit_results = _search_reddit_for_topic(clean_query)
-    results.extend(reddit_results)
+    results.extend(_search_reddit(clean_query))
 
     if not results:
         return None
 
-    # Format results for context injection
-    formatted = "WEB SEARCH RESULTS (use these to inform your response, share naturally like you found it yourself):\n"
+    formatted = ""
     for i, r in enumerate(results[:4], 1):
-        formatted += f"\n{i}. [{r['source']}] {r['title']}\n   {r['text']}\n"
+        formatted += f"{i}. [{r['source']}] {r['title']}\n   {r['text']}\n\n"
 
-    formatted += "\nIMPORTANT: Share this info naturally as if YOU found it while scrolling. Don't say 'according to search results'. Say things like 'maine padha ki...', 'dekh sun ye interesting hai', 'arre haan ye toh...'"
-
-    return formatted
+    return formatted.strip()
