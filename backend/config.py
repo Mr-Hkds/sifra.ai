@@ -39,7 +39,7 @@ GROQ_HEAVY_MODEL = "llama-3.3-70b-versatile"       # Memory extraction, proactiv
 # ---------------------------------------------------------------------------
 # Generation Parameters
 # ---------------------------------------------------------------------------
-CHAT_TEMPERATURE = 0.72        # Character-consistent but creative
+CHAT_TEMPERATURE = 0.78        # Slightly more creative for varied responses
 CHAT_MAX_TOKENS = 350          # Punchy, not verbose
 FAST_TEMPERATURE = 0.15        # Deterministic for classification
 FAST_MAX_TOKENS = 50           # Short structured output
@@ -80,7 +80,13 @@ MAX_RESPONSE_LENGTH = 500    # Characters — hard cap
 MIN_RESPONSE_LENGTH = 5     # Too short = something broke
 
 # ---------------------------------------------------------------------------
+# Search Intelligence
+# ---------------------------------------------------------------------------
+SEARCH_INTENT_TEMPERATURE = 0.15   # Deterministic for search intent detection
+SEARCH_QUERY_TEMPERATURE = 0.30   # Balanced for query extraction
+
+# ---------------------------------------------------------------------------
 # Version
 # ---------------------------------------------------------------------------
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 BUILD_DATE = "2026-03-19"

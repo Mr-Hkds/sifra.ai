@@ -157,6 +157,64 @@ def _calculate_gap(last_message_timestamp: str | None) -> int | None:
 
 
 # ---------------------------------------------------------------------------
+# Conversation Dynamics — pace, phase, length suggestion
+# ---------------------------------------------------------------------------
+
+def _detect_conversation_pace(gap_minutes: int | None) -> str:
+    """How fast is this conversation moving?"""
+    if gap_minutes is None:
+        return "returning"  # First message or no history
+    if gap_minutes < 2:
+        return "rapid"       # Back-and-forth texting
+    if gap_minutes < 15:
+        return "flowing"     # Normal conversation pace
+    if gap_minutes < 60:
+        return "slow"        # Occasional check-ins
+    return "returning"       # Coming back after a long gap
+
+
+def _detect_conversation_phase(gap_minutes: int | None, message_length: str, msg_count_in_session: int) -> str:
+    """What phase is this conversation in?"""
+    if gap_minutes is None or gap_minutes > 60:
+        return "opening"           # Starting fresh
+    if msg_count_in_session < 3:
+        return "opening"           # Still warming up
+    if message_length in ("very_short", "short") and gap_minutes > 10:
+        return "winding_down"      # Conversation dying out
+    return "mid_flow"              # In the groove
+
+
+def _suggest_response_length(message_length: str, pace: str, energy: str, phase: str) -> str:
+    """
+    Suggest how long Sifra's response should be.
+    This is a HINT, not a hard rule.
+    """
+    # Short input = short output (the #1 rule for sounding human)
+    if message_length == "very_short":
+        return "one_word"  # "lol", "hmm", "sahi"
+    if message_length == "short" and energy != "high":
+        return "short"     # 3-8 words
+    
+    # Rapid pace = keep it snappy
+    if pace == "rapid":
+        return "short"
+    
+    # Opening phase = not too long, not too short
+    if phase == "opening":
+        return "medium"
+    
+    # Long emotional input = longer response
+    if message_length == "long" and energy != "low":
+        return "long"
+    
+    # Winding down = keep it brief
+    if phase == "winding_down":
+        return "short"
+    
+    return "medium"  # Default
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -164,10 +222,11 @@ def build_context(
     message: str,
     sentiment: Sentiment,
     last_message_timestamp: str | None = None,
+    recent_message_count: int = 0,
 ) -> dict:
     """
     Build the complete context object for this interaction.
-    Combines time, sentiment, typing energy, and personality mode.
+    Combines time, sentiment, typing energy, conversation dynamics, and personality mode.
 
     Returns a context dict used by brain.py to construct the prompt.
     """
@@ -198,15 +257,24 @@ def build_context(
         time_label, effective_sentiment, message, gap_minutes
     )
 
+    # Conversation dynamics
+    message_length = _classify_length(message)
+    pace = _detect_conversation_pace(gap_minutes)
+    phase = _detect_conversation_phase(gap_minutes, message_length, recent_message_count)
+    length_hint = _suggest_response_length(message_length, pace, final_energy, phase)
+
     return {
         "hour": hour,
         "time_label": time_label,
         "day": day,
-        "message_length": _classify_length(message),
+        "message_length": message_length,
         "has_question": _has_question(message),
         "sentiment": effective_sentiment,
         "personality_mode": personality_mode,
         "gap_minutes": gap_minutes,
         "location": USER_LOCATION,
         "typing_energy": typing_energy,
+        "conversation_pace": pace,
+        "conversation_phase": phase,
+        "response_length_hint": length_hint,
     }

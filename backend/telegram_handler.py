@@ -6,6 +6,7 @@ No more scattered logic or wrong-mood GIFs.
 
 import os
 import re
+import random
 import logging
 import threading
 
@@ -28,6 +29,10 @@ CORE_RULES_PATTERN = re.compile(
     r"sifra,?\s*update\s+core\s+rules?:\s*(.+)", re.IGNORECASE | re.DOTALL
 )
 
+# Reaction and sticker probability
+REACTION_CHANCE = 0.35       # 35% chance to react to a message
+STICKER_CHANCE = 0.15        # 15% chance to send a sticker after reply
+
 
 # ---------------------------------------------------------------------------
 # Telegram API Helpers
@@ -44,6 +49,142 @@ def send_message(chat_id: int | str, text: str) -> bool:
         return resp.status_code == 200
     except Exception as e:
         logger.error(f"send_message failed: {e}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Emoji Reactions — react to user messages with relevant emoji
+# ---------------------------------------------------------------------------
+
+# Mood → possible reaction emojis (Telegram-supported)
+MOOD_REACTIONS = {
+    "happy":      ["😊", "❤️", "🔥", "👍"],
+    "excited":    ["🔥", "🎉", "❤️", "👏"],
+    "sad":        ["❤️", "😢", "🥺"],
+    "stressed":   ["❤️", "😢", "👀"],
+    "anxious":    ["❤️", "🥺"],
+    "bored":      ["😐", "👀", "💤"],
+    "angry":      ["👀", "😐"],
+    "neutral":    ["👍", "👀"],
+    "tired":      ["😢", "❤️", "💤"],
+    "curious":    ["👀", "🤔", "👍"],
+    "playful":    ["😂", "🔥", "👏", "💀"],
+    "frustrated": ["😢", "❤️", "👀"],
+    "nostalgic":  ["❤️", "🥺", "😢"],
+    "lonely":     ["❤️", "🥺"],
+    "grateful":   ["❤️", "🔥", "👍"],
+    "confused":   ["🤔", "👀"],
+    "romantic":   ["❤️", "🔥", "😊"],
+}
+
+# Generic reactions for any mood
+GENERIC_REACTIONS = ["👍", "👀", "😂", "🔥", "❤️", "💀"]
+
+
+def react_to_message(chat_id: int | str, message_id: int, emotion: str) -> bool:
+    """Set an emoji reaction on a user's message."""
+    try:
+        # Pick a relevant emoji based on detected mood
+        emojis = MOOD_REACTIONS.get(emotion, GENERIC_REACTIONS)
+        chosen_emoji = random.choice(emojis)
+
+        resp = requests.post(
+            f"{TELEGRAM_API}/setMessageReaction",
+            json={
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "reaction": [{"type": "emoji", "emoji": chosen_emoji}],
+                "is_big": random.random() < 0.1,  # 10% chance of big reaction
+            },
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            logger.info(f"Reacted with {chosen_emoji} to message {message_id}")
+            return True
+        else:
+            logger.warning(f"Reaction failed: {resp.status_code} - {resp.text[:100]}")
+            return False
+    except Exception as e:
+        logger.error(f"react_to_message failed: {e}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Stickers — send relevant stickers from popular packs
+# ---------------------------------------------------------------------------
+
+# Sticker set names → mapped by emotion category
+# These are popular public sticker sets on Telegram
+STICKER_SETS = {
+    "funny": ["HotCherry", "MrCat", "RaccoonPack", "PepeTheFrog"],
+    "cute": ["AnimatedStickerPack", "LoveDoves", "CatMemes"],
+    "sad": ["SadCat", "CatMemes"],
+    "cool": ["HotCherry", "PepeTheFrog"],
+}
+
+# Emotion → sticker mood category
+EMOTION_TO_STICKER_MOOD = {
+    "happy": "cute", "excited": "funny", "sad": "sad", "stressed": "sad",
+    "anxious": "cute", "bored": "funny", "angry": "funny",
+    "neutral": "funny", "tired": "sad", "curious": "cool",
+    "playful": "funny", "frustrated": "sad", "nostalgic": "cute",
+    "lonely": "sad", "grateful": "cute", "confused": "funny",
+    "romantic": "cute",
+}
+
+# Cache for fetched sticker file_ids
+_sticker_cache: dict[str, list[str]] = {}
+
+
+def _fetch_sticker_set(set_name: str) -> list[str]:
+    """Fetch sticker file_ids from a Telegram sticker set."""
+    if set_name in _sticker_cache:
+        return _sticker_cache[set_name]
+
+    try:
+        resp = requests.get(
+            f"{TELEGRAM_API}/getStickerSet",
+            params={"name": set_name},
+            timeout=8,
+        )
+        if resp.status_code != 200:
+            return []
+
+        stickers = resp.json().get("result", {}).get("stickers", [])
+        file_ids = [s["file_id"] for s in stickers if "file_id" in s]
+        if file_ids:
+            _sticker_cache[set_name] = file_ids
+        return file_ids
+    except Exception as e:
+        logger.error(f"Failed to fetch sticker set {set_name}: {e}")
+        return []
+
+
+def send_sticker(chat_id: int | str, emotion: str) -> bool:
+    """Send a random relevant sticker based on the detected emotion."""
+    try:
+        mood_category = EMOTION_TO_STICKER_MOOD.get(emotion, "funny")
+        set_names = STICKER_SETS.get(mood_category, STICKER_SETS["funny"])
+
+        # Try sticker sets until we find one that works
+        random.shuffle(set_names)
+        for set_name in set_names:
+            file_ids = _fetch_sticker_set(set_name)
+            if file_ids:
+                chosen = random.choice(file_ids)
+                resp = requests.post(
+                    f"{TELEGRAM_API}/sendSticker",
+                    json={"chat_id": chat_id, "sticker": chosen},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    logger.info(f"Sent sticker from {set_name} for emotion: {emotion}")
+                    return True
+
+        logger.warning(f"No sticker sets available for emotion: {emotion}")
+        return False
+    except Exception as e:
+        logger.error(f"send_sticker failed: {e}")
         return False
 
 
@@ -309,17 +450,23 @@ def process_update(update: dict) -> dict:
             f"sarcasm={user_sentiment.sarcasm})"
         )
 
-        # --- Step 3: Build context ---
-        context = context_engine.build_context(text, user_sentiment, last_ts)
-        logger.info(f"Context: mode={context['personality_mode']}")
+        # --- Step 3: Build context (now with conversation dynamics) ---
+        recent_user_count = sum(1 for m in conversation_history[-10:] if m.get("role") == "user")
+        context = context_engine.build_context(
+            text, user_sentiment, last_ts,
+            recent_message_count=recent_user_count,
+        )
+        logger.info(f"Context: mode={context['personality_mode']}, pace={context.get('conversation_pace')}, length_hint={context.get('response_length_hint')}")
 
         # --- Step 4: Save user message ---
         save_conversation("user", text, mood_detected=user_sentiment.emotion, platform="telegram")
 
-        # --- Step 5: Web search if needed ---
+        # --- Step 5: Web search if needed (AI-powered intent detection) ---
         search_results = None
-        if web_search.should_search(text):
+        if web_search.should_search(text, recent_str):
             search_results = web_search.search(text)
+            if search_results:
+                logger.info(f"Web search returned results for: {text[:50]}")
 
         # --- Step 6: Generate response ---
         state = get_sifra_state()
@@ -340,17 +487,35 @@ def process_update(update: dict) -> dict:
             platform="telegram",
         )
 
-        # --- Step 8: Send reply ---
+        # --- Step 8: React to user's message (random, mood-based) ---
+        message_id = message.get("message_id")
+        if message_id and random.random() < REACTION_CHANCE:
+            # Run reaction in background to not slow down reply
+            threading.Thread(
+                target=react_to_message,
+                args=(chat_id, message_id, user_sentiment.emotion),
+                daemon=True,
+            ).start()
+
+        # --- Step 9: Send reply ---
         send_message(chat_id, reply)
 
-        # --- Step 9: Update state ---
+        # --- Step 10: Maybe send a sticker (random, mood-based) ---
+        if random.random() < STICKER_CHANCE:
+            threading.Thread(
+                target=send_sticker,
+                args=(chat_id, user_sentiment.emotion),
+                daemon=True,
+            ).start()
+
+        # --- Step 11: Update state ---
         update_sifra_state({
             "current_mood": context["sentiment"].emotion,
             "personality_mode": context["personality_mode"],
             "energy_level": brain._derive_sifra_energy(context["sentiment"], context["time_label"]),
         })
 
-        # --- Step 10: Memory extraction (async) ---
+        # --- Step 12: Memory extraction (async) ---
         thread = threading.Thread(
             target=_extract_memories_async,
             args=(text, recent_str),

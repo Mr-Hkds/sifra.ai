@@ -76,6 +76,26 @@ def validate(response: str, recent_sifra_messages: list[str] | None = None) -> t
     if emoji_count > 4:
         issues.append(f"Too many emojis ({emoji_count}) — Sifra uses them sparingly")
 
+    # 8. Structural repetition — don't start messages the same way
+    if recent_sifra_messages and len(recent_sifra_messages) >= 2:
+        resp_opener = response.strip().split()[0].lower() if response.strip() else ""
+        if resp_opener:
+            recent_openers = [
+                msg.strip().split()[0].lower()
+                for msg in recent_sifra_messages[-3:]
+                if msg and msg.strip()
+            ]
+            # If last 2+ messages started with the same word, reject
+            same_opener_count = sum(1 for op in recent_openers if op == resp_opener)
+            if same_opener_count >= 2:
+                issues.append(
+                    f"Starts with '{resp_opener}' again — vary the opening. "
+                    f"Try starting with actual content, a reaction, or a question instead"
+                )
+
+    # 9. Length appropriateness — don't write paragraphs for short messages
+    # This is checked by the caller who can pass user_message_length
+
     return len(issues) == 0, issues
 
 
