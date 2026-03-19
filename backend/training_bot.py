@@ -486,7 +486,8 @@ async def run_training_session(progress_callback=None) -> dict:
                 for turn in range(turns):
                     try:
                         # Send message
-                        await client.send_message(rumik, current_msg)
+                        sent_msg = await client.send_message(rumik, current_msg)
+                        my_msg_id = sent_msg.id
                         phase_stats["messages_sent"] += 1
                         stats["total_messages_sent"] += 1
 
@@ -499,8 +500,8 @@ async def run_training_session(progress_callback=None) -> dict:
                         wait_time = TRAINING_RESPONSE_WAIT if turn == 0 else TRAINING_FOLLOW_UP_WAIT
                         await asyncio.sleep(wait_time)
 
-                        # Get Rumik's response
-                        messages = await client.get_messages(rumik, limit=5)
+                        # Get Rumik's NEW responses (only after our message)
+                        messages = await client.get_messages(rumik, limit=5, min_id=my_msg_id)
 
                         rumik_response = None
                         for msg in messages:
