@@ -129,6 +129,40 @@ def api_mood_history():
 
 
 # ===================================================================
+# RESET ENDPOINTS
+# ===================================================================
+
+@app.route("/api/reset/memories", methods=["POST"])
+def api_reset_memories():
+    from supabase_client import clear_all_memories
+    try:
+        count = clear_all_memories()
+        return jsonify({"ok": True, "memories_cleared": count}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/reset/conversations", methods=["POST"])
+def api_reset_conversations():
+    from supabase_client import clear_all_conversations
+    try:
+        count = clear_all_conversations()
+        return jsonify({"ok": True, "conversations_cleared": count}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/reset/full", methods=["POST"])
+def api_reset_full():
+    from supabase_client import full_reset
+    try:
+        result = full_reset()
+        return jsonify({"ok": True, **result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ===================================================================
 # CRON ENDPOINTS
 # ===================================================================
 
@@ -325,11 +359,87 @@ def api_status():
                 </div>
             </div>
         </div>
+        <div class="tech-card rounded-lg p-6">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="h-1 w-8 bg-red-500"></div>
+                <h2 class="font-mono text-xs font-semibold tracking-widest text-zinc-500 uppercase">Factory Reset</h2>
+            </div>
+            <p class="text-sm text-zinc-400 mb-6 leading-relaxed max-w-xl">
+                Wipe Sifra's memory and start fresh. This is irreversible — all memories and conversations will be permanently deleted.
+            </p>
+            <div class="flex flex-wrap gap-4">
+                <button onclick="resetAction('memories')" id="btn-memories"
+                    class="px-5 py-2.5 rounded-lg border border-zinc-700 text-sm font-medium text-zinc-300
+                    hover:bg-zinc-800 hover:border-zinc-600 hover:text-zinc-100
+                    active:scale-95 transition-all duration-200 cursor-pointer">
+                    Clear Memories
+                </button>
+                <button onclick="resetAction('conversations')" id="btn-conversations"
+                    class="px-5 py-2.5 rounded-lg border border-zinc-700 text-sm font-medium text-zinc-300
+                    hover:bg-zinc-800 hover:border-zinc-600 hover:text-zinc-100
+                    active:scale-95 transition-all duration-200 cursor-pointer">
+                    Clear Conversations
+                </button>
+                <button onclick="resetAction('full')" id="btn-full"
+                    class="px-5 py-2.5 rounded-lg border border-red-900/50 bg-red-950/30 text-sm font-medium text-red-400
+                    hover:bg-red-950/60 hover:border-red-700 hover:text-red-300
+                    active:scale-95 transition-all duration-200 cursor-pointer">
+                    ⚠ Full Factory Reset
+                </button>
+            </div>
+            <div id="reset-status" class="mt-4 hidden">
+                <p id="reset-msg" class="text-sm font-mono"></p>
+            </div>
+        </div>
         <footer class="text-xs font-mono text-zinc-600 border-t border-zinc-800/50 pt-8 flex justify-between">
             <span>SIFRA:MIND Core — v{VERSION}</span>
             <span>{BUILD_DATE}</span>
         </footer>
     </div>
+    <script>
+    async function resetAction(type) {{
+        const labels = {{
+            memories: 'Clear ALL memories? Sifra will forget everything about you.',
+            conversations: 'Clear ALL conversation history? The chat log will be wiped.',
+            full: 'FULL FACTORY RESET — This wipes ALL memories, conversations, and resets Sifra to default state. Are you absolutely sure?'
+        }};
+        if (!confirm(labels[type])) return;
+        if (type === 'full' && !confirm('Last chance. This cannot be undone. Proceed?')) return;
+
+        const btn = document.getElementById('btn-' + type);
+        const statusDiv = document.getElementById('reset-status');
+        const msgP = document.getElementById('reset-msg');
+
+        btn.disabled = true;
+        btn.textContent = 'Processing...';
+        statusDiv.classList.remove('hidden');
+        msgP.className = 'text-sm font-mono text-zinc-400';
+        msgP.textContent = '⏳ Working...';
+
+        try {{
+            const resp = await fetch('/api/reset/' + type, {{ method: 'POST' }});
+            const data = await resp.json();
+            if (data.ok) {{
+                msgP.className = 'text-sm font-mono text-emerald-400';
+                if (type === 'full') {{
+                    msgP.textContent = `✅ Factory reset complete — ${{data.memories_cleared}} memories, ${{data.conversations_cleared}} conversations cleared.`;
+                }} else if (type === 'memories') {{
+                    msgP.textContent = `✅ Cleared ${{data.memories_cleared}} memories.`;
+                }} else {{
+                    msgP.textContent = `✅ Cleared ${{data.conversations_cleared}} conversations.`;
+                }}
+            }} else {{
+                throw new Error(data.error || 'Unknown error');
+            }}
+        }} catch (e) {{
+            msgP.className = 'text-sm font-mono text-red-400';
+            msgP.textContent = '❌ Failed: ' + e.message;
+        }} finally {{
+            btn.disabled = false;
+            btn.textContent = type === 'full' ? '⚠ Full Factory Reset' : type === 'memories' ? 'Clear Memories' : 'Clear Conversations';
+        }}
+    }}
+    </script>
 </body>
 </html>"""
 

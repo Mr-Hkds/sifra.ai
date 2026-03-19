@@ -380,3 +380,60 @@ def mark_proactive_sent(message_id: str) -> None:
         get_client().table("proactive_queue").update({"sent": True}).eq("id", message_id).execute()
     except Exception as e:
         logger.error(f"mark_proactive_sent: {e}")
+
+
+# ===================================================================
+# RESET / FACTORY WIPE
+# ===================================================================
+
+def clear_all_memories() -> int:
+    """Delete ALL memories. Returns count deleted."""
+    try:
+        result = get_client().table("memories").select("id").execute()
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            # Supabase needs a filter for delete — use neq on a non-existent value to match all
+            get_client().table("memories").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        return count
+    except Exception as e:
+        logger.error(f"clear_all_memories: {e}")
+        return 0
+
+
+def clear_all_conversations() -> int:
+    """Delete ALL conversation history. Returns count deleted."""
+    try:
+        result = get_client().table("conversations").select("id").execute()
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            get_client().table("conversations").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        return count
+    except Exception as e:
+        logger.error(f"clear_all_conversations: {e}")
+        return 0
+
+
+def full_reset() -> dict:
+    """
+    Factory reset — wipe everything and start fresh.
+    Clears: memories, conversations, resets state.
+    Returns summary of what was cleared.
+    """
+    memories_cleared = clear_all_memories()
+    conversations_cleared = clear_all_conversations()
+
+    # Reset Sifra's state to defaults
+    update_sifra_state({
+        "current_mood": "neutral",
+        "energy_level": 7,
+        "personality_mode": "normal",
+        "today_summary": "",
+        "core_rules": "",
+        "active_memories": [],
+    })
+
+    return {
+        "memories_cleared": memories_cleared,
+        "conversations_cleared": conversations_cleared,
+        "state_reset": True,
+    }
