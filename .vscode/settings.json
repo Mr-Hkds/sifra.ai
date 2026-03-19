@@ -1,0 +1,11 @@
+{
+    "python.analysis.extraPaths": ["./backend"],
+    "python.analysis.typeCheckingMode": "off",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportGeneralTypeIssues": "none",
+        "reportArgumentType": "none",
+        "reportUnknownArgumentType": "none",
+        "reportUnknownVariableType": "none",
+        "reportUnknownMemberType": "none"
+    }
+}

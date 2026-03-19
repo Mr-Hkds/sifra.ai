@@ -206,10 +206,10 @@ def _handle_core_rules(text: str, chat_id: int | str) -> bool:
     if not match:
         return False
 
-    new_rules = match.group(1).strip()
+    new_rules = str(match.group(1)).strip()
     try:
         update_sifra_state({"core_rules": new_rules})
-        confirm = f"✅ Core rules updated:\n\n\"{new_rules}\""
+        confirm = f"✅ Core rules updated:\n\n\"{str(new_rules)[:80]}\""
         send_message(chat_id, confirm)
         save_conversation("user", text, platform="telegram")
         save_conversation("sifra", confirm, platform="telegram")
@@ -287,85 +287,25 @@ def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
 
 
 def _start_training(chat_id: int | str) -> dict:
-    """Start an auto-training session via admin command. Enhanced v2 with phase reports."""
+    """Trigger an auto-training session seamlessly on the local laptop via a Supabase flag."""
+    from supabase_client import insert_memory
+    
+    # Drop a system core memory that acts as a signal for the local listener
+    insert_memory(content="SYSTEM_FLAG_TRIGGER_AUTO_TRAIN", category="system", importance=10)
+    
     send_message(
         chat_id,
-        f"🚀 <b>Starting Multi-Phase Training Session v2</b>\n\n"
-        f"Target: @{RUMIK_BOT_USERNAME}\n"
-        f"Phases: Warm-Up → Emotional → Deep Threads → Personality → Edge Cases\n"
-        f"Estimated: ~35+ messages, 8-12 minutes\n\n"
-        f"I'll send phase updates as we go..."
+        f"📡 <b>Signal Sent to Laptop</b>\n\n"
+        f"I just dropped a trigger flag in the database. If your laptop is turned on and running the listener, the multi-phase training protocol will auto-engage in ~5 seconds.\n\n"
+        f"You will get a confirmation message as soon as it begins!"
     )
-
-    import threading
-    from training_bot import run_training, PHASE_CONFIG
-
-    def _progress(phase_name, message):
-        """Send live progress updates."""
-        try:
-            send_message(chat_id, f"⏳ {phase_name}: {message}")
-        except Exception:
-            pass
-
-    def _run():
-        result = run_training(progress_callback=_progress)
-        if result.get("success"):
-            # Build detailed report
-            duration = result.get('session_duration', 0)
-            mins = int(duration // 60)
-            secs = int(duration % 60)
-
-            msg = (
-                f"✅ <b>Training Session Complete!</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"⏱ Duration: <b>{mins}m {secs}s</b>\n"
-                f"📤 Messages Sent: <b>{result.get('total_messages_sent', 0)}</b>\n"
-                f"📥 Responses Captured: <b>{result.get('total_responses_captured', 0)}</b>\n"
-                f"🔁 Follow-ups Generated: <b>{result.get('total_follow_ups', 0)}</b>\n"
-                f"🧵 Threads Completed: <b>{result.get('total_threads', 0)}</b>\n"
-                f"⭐ Avg Quality: <b>{result.get('avg_overall_quality', 0)}/10</b>\n"
-                f"❌ Errors: {result.get('total_errors', 0)}\n\n"
-            )
-
-            # Per-phase breakdown
-            msg += "<b>Phase Breakdown:</b>\n"
-            phases = result.get("phases", {})
-            for phase_key, pstats in phases.items():
-                phase_name = PHASE_CONFIG.get(phase_key, {}).get("name", phase_key)
-                captured = pstats.get("responses_captured", 0)
-                sent = pstats.get("messages_sent", 0)
-                quality = pstats.get("avg_quality", 0)
-                follow = pstats.get("follow_ups", 0)
-                msg += f"  {phase_name}: {captured}/{sent}"
-                if follow:
-                    msg += f" (+{follow} follow-ups)"
-                msg += f" — quality: {quality}/10\n"
-
-            # Post-training analysis
-            post = result.get("post_analysis", {})
-            if post and not post.get("error"):
-                msg += f"\n🧠 <b>Deep Analysis:</b> {post.get('patterns_found', 0)} new patterns extracted"
-
-            meta = result.get("meta_learning", {})
-            if meta and meta.get("directives_generated", 0) > 0:
-                msg += f"\n🎯 <b>Meta-Learning:</b> {meta['directives_generated']} behavioral directives generated"
-
-            msg += "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            msg += "\n<i>Use /sifra_learn_status to see what I learned!</i>"
-        else:
-            err = result.get('error', 'Unknown error')
-            msg = f"❌ <b>Training Failed</b>\n{err}"
-
-        send_message(chat_id, msg)
-
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
-    return {"success": True, "reply": "training v2 started"}
+    return {"success": True, "reply": "remote trigger inserted"}
 
 def _send_learn_status(chat_id: int | str) -> dict:
     """Send observation learning stats via Telegram. Enhanced v2."""
     stats = get_observation_stats()
     from supabase_client import get_all_learnings
+
     learnings = get_all_learnings()
 
     msg = (
@@ -386,7 +326,7 @@ def _send_learn_status(chat_id: int | str) -> dict:
         # Count by category
         cat_counts: dict[str, int] = {}
         for l in regular:
-            cat = l.get('category', '?')
+            cat = str(l.get('category', '?'))
             cat_counts[cat] = cat_counts.get(cat, 0) + 1
 
         if cat_counts:
@@ -397,16 +337,16 @@ def _send_learn_status(chat_id: int | str) -> dict:
         if meta_directives:
             msg += f"\n🎯 <b>Active Behavioral Directives ({len(meta_directives)}):</b>\n"
             for m in meta_directives[:5]:
-                pattern = m.get('pattern', '')[:100]
-                conf = m.get('confidence', 0)
+                pattern = str(m.get('pattern', ''))[:100]
+                conf = float(m.get('confidence', 0))
                 msg += f"  → {pattern} <i>({conf:.0%})</i>\n"
 
         if regular:
             msg += f"\n<b>Top Patterns ({len(regular)} total):</b>\n"
             for l in regular[:6]:
-                cat = l.get('category', '?')
-                pattern = l.get('pattern', '')[:70]
-                conf = l.get('confidence', 0)
+                cat = str(l.get('category', '?'))
+                pattern = str(l.get('pattern', ''))[:70]
+                conf = float(l.get('confidence', 0))
                 msg += f"  • [{cat}] {pattern} <i>({conf:.0%})</i>\n"
 
     msg += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -462,9 +402,9 @@ def _send_diagnostics(chat_id: int | str) -> dict:
     # State
     try:
         state = get_sifra_state()
-        mood = state.get("current_mood", "unknown")
-        energy = state.get("energy_level", "?")
-        mode = state.get("personality_mode", "unknown")
+        mood = str(state.get("current_mood", "unknown"))
+        energy = str(state.get("energy_level", "?"))
+        mode = str(state.get("personality_mode", "unknown"))
     except Exception:
         mood = energy = mode = "error"
 
@@ -629,7 +569,7 @@ def process_update(update: dict) -> dict:
 
         # --- Step 6: Generate response ---
         state = get_sifra_state()
-        core_rules = state.get("core_rules", "")
+        core_rules = str(state.get("core_rules", ""))
 
         reply = brain.generate_response(
             user_message=text,
@@ -682,11 +622,12 @@ def process_update(update: dict) -> dict:
             ).start()
 
         # --- Step 12: Update state ---
-        update_sifra_state({
+        sifra_state_update = {
             "current_mood": context["sentiment"].emotion,
             "personality_mode": context["personality_mode"],
             "energy_level": brain._derive_sifra_energy(context["sentiment"], context["time_label"]),
-        })
+        }
+        update_sifra_state(sifra_state_update)
 
         # --- Step 13: Memory extraction (async) ---
         thread = threading.Thread(
