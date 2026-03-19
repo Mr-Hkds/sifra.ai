@@ -462,6 +462,10 @@ def process_update(update: dict) -> dict:
         # PRIVATE MODE — Normal Sifra Pipeline
         # =================================================================
 
+        # --- Auto-detect forwarded messages from Rumik ---
+        if _is_forwarded_from_rumik(message):
+            return _handle_forwarded_rumik(text, chat_id)
+
         if USER_TELEGRAM_ID and user_id != USER_TELEGRAM_ID:
             logger.warning(f"Unauthorized user: {user_id}")
             return {"success": False, "error": "Unauthorized"}
@@ -594,6 +598,48 @@ def process_update(update: dict) -> dict:
     except Exception as e:
         logger.error(f"process_update failed: {e}")
         return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Forwarded Message Detection — Auto-learn from Rumik
+# ---------------------------------------------------------------------------
+
+def _is_forwarded_from_rumik(message: dict) -> bool:
+    """
+    Detect if a message was forwarded from Rumik's bot.
+    Supports both Bot API 7.0+ (forward_origin) and legacy (forward_from).
+    """
+    # Bot API 7.0+ format
+    forward_origin = message.get("forward_origin", {})
+    if forward_origin:
+        origin_type = forward_origin.get("type", "")
+        if origin_type == "user":
+            sender = forward_origin.get("sender_user", {})
+            if sender.get("is_bot") and sender.get("username", "").lower() == RUMIK_BOT_USERNAME:
+                return True
+
+    # Legacy format (older Bot API)
+    forward_from = message.get("forward_from", {})
+    if forward_from:
+        if forward_from.get("is_bot") and forward_from.get("username", "").lower() == RUMIK_BOT_USERNAME:
+            return True
+
+    return False
+
+
+def _handle_forwarded_rumik(text: str, chat_id: int | str) -> dict:
+    """
+    Auto-learn from a forwarded Rumik message.
+    No /learn prefix needed — just forward and Sifra picks it up.
+    """
+    logger.info(f"Auto-detected forwarded Rumik message: {text[:80]}...")
+
+    def _learn_async():
+        result = observation_engine.learn_from_single(text)
+        send_message(chat_id, f"📝 {result}")
+
+    threading.Thread(target=_learn_async, daemon=True).start()
+    return {"success": True, "reply": "auto-learning from forwarded rumik message"}
 
 
 # ---------------------------------------------------------------------------

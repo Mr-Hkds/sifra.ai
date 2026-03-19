@@ -213,9 +213,10 @@ def api_status():
         "personality": "Personality System (identity + style + constraints)",
         "memory_engine": "Memory Engine (contextual retrieval + decay)",
         "quality_gate": "Quality Gate (anti-AI-slop filter)",
-        "telegram_handler": "Telegram Integration (10-step pipeline)",
+        "telegram_handler": "Telegram Integration (pipeline + group observer)",
         "proactive": "Proactive Messaging (greetings, gossip, kidhar ho)",
         "web_search": "Web Search (DuckDuckGo + Reddit)",
+        "observation_engine": "Observation Learning (learn from other bots)",
         "supabase_client": "Database Client (Supabase)",
     }
     module_status = {}
@@ -249,7 +250,7 @@ def api_status():
         "Multi-Provider AI (Gemini + Groq cascade)",
         "AI Sentiment Analysis (not keywords)",
         "Context-Aware Memory Retrieval",
-        "Layered Prompt Architecture (5 layers)",
+        "Layered Prompt Architecture (7 layers)",
         "Response Quality Gate + Auto-Retry",
         "Anti-Repetition + Opener Variety Guard",
         "Sarcasm Detection",
@@ -264,6 +265,8 @@ def api_status():
         "Sifra Activity Generator (own life simulation)",
         "AI-Controlled Emoji Reactions",
         "AI-Controlled Sticker Sending",
+        "Observation Learning (learn from Rumik.ai)",
+        "Training Arena (silent group observer)",
         "High-Energy, Gossipy Messaging Style",
     ]
 
