@@ -1,19 +1,21 @@
-import React, { useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import NeuralHeader from './components/NeuralHeader';
 import MemoryCore from './components/MemoryCore';
 import LiveFeed from './components/LiveFeed';
 import SignalAnalysis from './components/SignalAnalysis';
 import ControlPanel from './components/ControlPanel';
 import StatusBar from './components/StatusBar';
+import LearningsDash from './components/LearningsDash';
 import { useSifraState } from './hooks/useSifraState';
 import { useMemories } from './hooks/useMemories';
 import { useConversations } from './hooks/useConversations';
 
 /**
  * App — Main SIFRA:MIND dashboard layout.
- * Three zones: Neural Header → Three-column grid → Status Bar
+ * Three zones: Neural Header → Main Content → Status Bar
  */
 export default function App() {
+  const [currentTab, setCurrentTab] = useState('dashboard');
   const { state, loading: stateLoading, refresh: refreshState } = useSifraState();
   const { memories, addMemory, removeMemory, loading: memLoading, refresh: refreshMemories } = useMemories();
   const { conversations, loading: convLoading, refresh: refreshConversations } = useConversations();
@@ -42,10 +44,11 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-[var(--color-bg-primary)]">
       {/* ZONE 1 — Neural Header */}
-      <NeuralHeader state={state} />
+      <NeuralHeader state={state} currentTab={currentTab} onTabChange={setCurrentTab} />
 
-      {/* ZONE 2 — Spatial Three Column Grid */}
-      <main className="flex-1 max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-[300px_1fr_300px] gap-8 py-8 px-6 overflow-hidden">
+      {/* ZONE 2 — Main Content Area */}
+      {currentTab === 'dashboard' ? (
+        <main className="flex-1 max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-[300px_1fr_300px] gap-8 py-8 px-6 overflow-hidden">
         {/* Left — Memory Core */}
         <div className="overflow-hidden flex flex-col bg-[var(--color-bg-card)] rounded-xl border border-[var(--color-border-subtle)]">
           <MemoryCore
@@ -70,6 +73,9 @@ export default function App() {
           </div>
         </div>
       </main>
+      ) : (
+        <LearningsDash />
+      )}
 
       {/* ZONE 3 — Status Bar */}
       <StatusBar

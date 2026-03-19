@@ -43,6 +43,10 @@ export async function fetchMoodHistory(days = 7) {
   return apiFetch(`/api/mood_history?days=${days}`);
 }
 
+export async function fetchLearnings() {
+  return apiFetch('/api/learnings');
+}
+
 export async function addMemory(content, category = 'core', importance = 5) {
   return apiFetch('/api/memories', {
     method: 'POST',

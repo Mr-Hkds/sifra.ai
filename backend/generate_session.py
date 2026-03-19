@@ -46,6 +46,8 @@ async def main():
     print("3. Add: TELEGRAM_SESSION = <paste the string>")
     print("4. Redeploy your backend")
     print("=" * 50)
+    print()
+    input("Press Enter to exit...")
 
     await client.disconnect()
 

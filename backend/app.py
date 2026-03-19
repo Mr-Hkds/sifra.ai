@@ -211,6 +211,22 @@ def api_train():
     return jsonify({"ok": True, "message": "Training session started in background"}), 200
 
 
+@app.route("/api/learnings", methods=["GET"])
+def api_learnings():
+    """Fetch observation learning stats and all extracted patterns."""
+    from supabase_client import get_observation_stats, get_all_learnings
+    try:
+        stats = get_observation_stats()
+        learnings = get_all_learnings()
+        return jsonify({
+            "ok": True,
+            "stats": stats,
+            "learnings": learnings
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ===================================================================
 # STATUS & HEALTH
 # ===================================================================

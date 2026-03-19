@@ -5,15 +5,16 @@ import { Brain, Zap, Clock, Activity } from 'lucide-react';
 
 /**
  * NeuralHeader — the top bar of SIFRA:MIND
- * Shows logo, mood pill, energy bar, personality mode, last active, EKG line
+ * Shows logo, navigation tabs, mood pill, energy bar, personality mode
  */
-export default function NeuralHeader({ state }) {
+export default function NeuralHeader({ state, currentTab = 'dashboard', onTabChange }) {
   const {
     current_mood = 'neutral',
     energy_level = 7,
     personality_mode = 'normal',
     last_active = null,
   } = state;
+
 
   const moodColors = {
     neutral: 'bg-[var(--color-accent-green)]/15 text-[var(--color-accent-green)]',
@@ -67,6 +68,32 @@ export default function NeuralHeader({ state }) {
             v1.0
           </span>
         </div>
+
+        {/* Navigation Tabs */}
+        {onTabChange && (
+          <div className="hidden md:flex items-center gap-1 bg-[var(--color-bg-card)] p-1 rounded-lg border border-[var(--color-border-subtle)]">
+            <button
+              onClick={() => onTabChange('dashboard')}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                currentTab === 'dashboard'
+                  ? 'bg-[var(--color-bg-primary)] text-[var(--color-accent-green)] shadow-sm'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
+              }`}
+            >
+              System Core
+            </button>
+            <button
+              onClick={() => onTabChange('learnings')}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                currentTab === 'learnings'
+                  ? 'bg-[var(--color-bg-primary)] text-[var(--color-accent-green)] shadow-sm'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
+              }`}
+            >
+              Learnings
+            </button>
+          </div>
+        )}
 
         {/* Status indicators */}
         <div className="flex items-center gap-4">
