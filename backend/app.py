@@ -262,9 +262,9 @@ def api_status():
         "Conversation Threading (18 msg context)",
         "Conversation Dynamics (pace, phase, length hints)",
         "Sifra Activity Generator (own life simulation)",
-        "Emoji Reactions (mood-mapped, 35% chance)",
-        "Sticker Sending (emotion-based, popular packs)",
-        "Human-Like Message Variation (anti-robot rules)",
+        "AI-Controlled Emoji Reactions",
+        "AI-Controlled Sticker Sending",
+        "High-Energy, Gossipy Messaging Style",
     ]
 
     # Build HTML
