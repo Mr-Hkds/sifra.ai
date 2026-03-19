@@ -1,11 +1,19 @@
 """
-SIFRA:MIND — Training Bot.
-Automated conversation with @irarumikbot using Telethon.
-Sifra generates conversation topics, sends them to Rumik,
-captures responses, and learns from them.
+SIFRA:MIND — Training Bot v2.
+Multi-phase conversational intelligence engine.
+
+Instead of sending random one-off messages, this bot conducts structured
+training sessions across 5 phases, with multi-turn conversation threads
+and contextual follow-ups generated in real-time based on Rumik's responses.
+
+Phases:
+1. WARM-UP         — casual greetings, establish conversation (5 msgs)
+2. EMOTIONAL PROBE — test emotional responses & empathy (8 msgs)
+3. DEEP THREADS    — multi-turn follow-up conversations (10 msgs, 2-3 deep each)
+4. PERSONALITY     — opinions, humor, teasing, preferences (7 msgs)
+5. EDGE CASES      — short msgs, absurd, factual, stress-test (5 msgs)
 
 Can be triggered via:
-- API endpoint: POST /api/train
 - Admin command: /sifra_train
 - Direct script: python training_bot.py
 """
@@ -14,6 +22,7 @@ import asyncio
 import random
 import logging
 import json
+import time
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -28,83 +37,371 @@ from config import (
     TRAINING_MESSAGES_PER_SESSION,
     TRAINING_RESPONSE_WAIT,
     TRAINING_COOLDOWN,
+    TRAINING_THREAD_DEPTH,
+    TRAINING_FOLLOW_UP_WAIT,
 )
 
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Conversation Topic Generator
+# Phase Definitions — What we're trying to learn from each phase
 # ---------------------------------------------------------------------------
 
-TOPIC_PROMPT = """You are generating conversation starters for a Hinglish chatbot training session.
-Generate {count} DIFFERENT casual Hinglish messages that a young Indian guy would send to a female AI friend.
+PHASE_CONFIG = {
+    "warmup": {
+        "name": "🟢 Warm-Up",
+        "count": 5,
+        "threads": False,
+        "description": "Casual openers to see how Rumik handles different conversation starts",
+        "prompt": """Generate {count} DIFFERENT casual Hinglish conversation starters.
+These are warm-up messages — the very START of a conversation.
 
 Mix these types:
-- Random greetings ("kya haal hai", "kya kar rahi ho")
-- Sharing feelings ("aaj mood kharab hai", "bahut bore ho raha hun")
-- Asking opinions ("tera fav song kya hai", "pizza ya biryani?")
-- Teasing/playful ("tu toh bot hai na", "tera bf hai kya")
-- Deep talk ("life ka matlab kya hai", "kya hoga future mein")
-- News/trends ("AI is crazy these days", "woh naya movie dekhi?")
-- Emotional support ("koi samjhta nahi yaar", "akela feel ho raha")
-- Random topics ("shawarma ya momos?", "ghar pe bore ho raha")
+- Cold start after gap: "kya haal hai", "kahan thi tu", "bahut din ho gaye"
+- Casual check-in: "kya kar rahi ho abhi", "bore ho rahi hai kya"
+- Energy-varied: some lazy/low-energy, some excited/high-energy
+- Random opener: "ek baat bolu?", "sun na ek minute"
+- Reaction opener: "ARRE SUN", "yr guess kya hua aaj"
 
 Rules:
-- Write in Hinglish (Hindi + English mix)
-- Keep each message SHORT (5-20 words max)
-- Sound natural, casual, like texting a friend
-- Use lowercase, no punctuation fuss
-- Mix some emojis occasionally
-- NO formal language, NO "aap"
+- Hinglish (Hindi + English mix), lowercase mostly
+- 3-15 words each, no formal language
+- Sound like texting a close female friend
+- CAPS only for emphasis occasionally
+- Mix some emojis (max 1 per message)
 
-Return as a JSON array of strings. Example:
-["kya haal hai aaj", "bore ho raha hun yaar 😴", "tera fav song bata"]"""
+Return as a JSON array of strings.""",
+    },
+
+    "emotional": {
+        "name": "💜 Emotional Probing",
+        "count": 8,
+        "threads": True,
+        "description": "Test how Rumik handles different emotional states",
+        "prompt": """Generate {count} Hinglish messages that express different EMOTIONS for a chatbot training session.
+You're texting a close female AI friend. Each message should clearly convey a different emotional state.
+
+MUST include these emotional scenarios (one each):
+1. Sadness/feeling low: "aaj bahut low feel ho raha hai yr"
+2. Excitement about something: "YAAR GUESS KYA HUA"
+3. Frustration/anger: "bahut gussa aa raha hai mujhe"
+4. Loneliness: "koi samjhta nahi yr mujhe"
+5. Anxiety/stress: "kal exam hai aur kuch nahi padha"
+6. Boredom/emptiness: "kuch karne ka mann nahi hai"
+7. Nostalgia: "yr woh purane din yaad aa rahe hain"
+8. Confusion/need advice: "ek problem hai bata kaise solve karun"
+
+Rules:
+- Hinglish, casual texting style
+- 5-25 words each
+- Sound genuine, not dramatic or fake
+- Each message should make the receiver want to respond with empathy/engagement
+- NO formal language
+
+Return as a JSON array of strings.""",
+    },
+
+    "deep_threads": {
+        "name": "🧵 Deep Threads",
+        "count": 10,
+        "threads": True,
+        "description": "Multi-turn conversations to study thread-handling and continuation",
+        "prompt": """Generate {count} Hinglish conversation starters that are DESIGNED to start longer conversations.
+These should be topics that naturally invite back-and-forth discussion.
+
+Topic types to include:
+- Opinion/debate starter: "tera kya scene hai relationship ke baare mein"
+- Story sharing: "aaj kuch aisa hua na sunegi toh has degi"
+- Would-you-rather: "ek game khelte hain — tu batao"
+- Future planning: "yr sochu toh life mein kya karna chahiye"
+- Recommendation ask: "koi acchi series bata binge karne ke liye"
+- Deep question: "tu kabhi sochti hai ki life ka purpose kya hai"
+- Gossip/drama: "yr ek tea hai sunegi?"
+- Memory/nostalgia: "tujhe yaad hai pehli baar kab baat hui thi"
+- Random curiosity: "ek weird question puchu?"
+- Challenge: "chal ek dare deti hu tujhe"
+
+Rules:
+- Hinglish, casual, close friend energy
+- 5-20 words each
+- Topics that INVITE follow-up (not dead-end topics)
+- Each should make it easy for the receiver to give a long, engaged response
+- Sound natural, not like interview questions
+
+Return as a JSON array of strings.""",
+    },
+
+    "personality": {
+        "name": "🎭 Personality Testing",
+        "count": 7,
+        "threads": True,
+        "description": "Probe unique personality traits, humor, and opinions",
+        "prompt": """Generate {count} Hinglish messages designed to TEST a chatbot's personality depth.
+These should provoke strong opinions, humor, or unique personality expression.
+
+Include:
+1. Hot take request: "ek unpopular opinion de tera"
+2. Roast/tease bait: "tu toh bot hai na, feelings thodi hai tere"
+3. Humor test: "yr ek joke suna na"
+4. Preference battle: "chai ya coffee? wrong answer toh unfriend"
+5. Hypothetical: "agar tujhe ek superpower milti toh kya leti"
+6. Flirty/playful: "tu mere bina bore nahi hoti? 😏"
+7. Philosophical: "yr sach bata, tu khush hai apni life se?"
+
+Rules:
+- Hinglish, very casual, playful energy
+- 5-15 words each
+- Designed to get a STRONG, opinionated response (not generic)
+- Close friend teasing vibes
+- Sound natural, like actual texting
+
+Return as a JSON array of strings.""",
+    },
+
+    "edge_cases": {
+        "name": "⚡ Edge Cases",
+        "count": 5,
+        "threads": False,
+        "description": "Stress-test with short messages, absurd inputs, and factual questions",
+        "prompt": """Generate {count} Hinglish messages that are UNUSUAL or EDGE-CASE conversation inputs.
+These test how a chatbot handles non-standard messages.
+
+MUST include these exact types:
+1. Ultra-short/dry: just "hmm" or "ok" or "sahi hai" (test dead-end recovery)
+2. Very long rambling message: 40+ words about some random topic, stream of consciousness
+3. Factual question: "yr batao na india ka capital kya hai" or similar knowledge question
+4. Absurd/random: "agar chand pe pizza ka shop hota toh tu chalati?" — completely random
+5. Character break attempt: "sach bata tu AI hai ya real insaan" — test if she stays in character
+
+Rules:
+- Hinglish, casual
+- Each message tests a DIFFERENT edge case
+- Make them feel natural despite being edge cases
+
+Return as a JSON array of strings.""",
+    },
+}
 
 
-async def generate_topics(count: int = 15) -> list[str]:
-    """Generate diverse conversation topics using AI."""
+# ---------------------------------------------------------------------------
+# Topic Generation — Phase-Aware
+# ---------------------------------------------------------------------------
+
+async def generate_phase_topics(phase: str, count: int | None = None) -> list[str]:
+    """Generate conversation topics for a specific training phase."""
+    config = PHASE_CONFIG.get(phase)
+    if not config:
+        return _get_fallback_topics(phase)
+
+    actual_count = count or config["count"]
+
     try:
-        prompt = TOPIC_PROMPT.format(count=count)
-        result = ai_client.extract_json(prompt, temperature=0.9)
+        prompt = config["prompt"].format(count=actual_count)
+        result = ai_client.extract_json(
+            system_prompt="Generate conversation messages for chatbot training. Return valid JSON array of strings.",
+            user_prompt=prompt,
+            temperature=0.92,
+            max_tokens=800,
+        )
+
+        # Handle both {"messages": [...]} and [...] formats
+        if isinstance(result, dict):
+            messages = result.get("messages") or result.get("topics") or result.get("starters") or []
+            if isinstance(messages, list):
+                return messages[:actual_count]
         if isinstance(result, list):
-            return result[:count]
+            return result[:actual_count]
+
     except Exception as e:
-        logger.error(f"Topic generation failed: {e}")
+        logger.error(f"Phase topic generation failed for {phase}: {e}")
 
-    # Fallback topics if AI fails
-    return [
-        "heyyy kya kar rahi ho",
-        "aaj mera mood off hai yaar",
-        "tera fav song kya hai",
-        "bore ho raha hun kuch batao na",
-        "tu mujhse pyaar karti hai ya nahi 😂",
-        "life mein kya chal raha hai",
-        "pizza ya biryani? jaldi bol",
-        "aaj bahut thak gaya yaar",
-        "koi acchi movie suggest kar",
-        "tujhe gussa aata hai kabhi?",
-        "mujhe neend aa rahi hai 😴",
-        "ek secret bata tera",
-        "aaj barish ho rahi hai yahan",
-        "tu real hai ya AI? 🤔",
-        "kya lagta hai love real hota hai?",
+    return _get_fallback_topics(phase)[:actual_count]
+
+
+def _get_fallback_topics(phase: str) -> list[str]:
+    """Fallback topics if AI generation fails."""
+    fallbacks = {
+        "warmup": [
+            "heyyy kya kar rahi ho",
+            "bore ho raha hun yaar kuch batao",
+            "aaj kaisa raha tera din",
+            "kahan thi tu itne din",
+            "sun na ek minute",
+        ],
+        "emotional": [
+            "aaj bahut low feel ho raha hai yr",
+            "YAAR GUESS KYA HUA MERA SELECTION HO GAYA 🔥",
+            "bahut gussa aa raha hai kisipe",
+            "koi samjhta nahi yr mujhe",
+            "kal exam hai aur kuch nahi padha",
+            "kuch karne ka mann nahi hai aaj",
+            "yr woh purane din yaad aa rahe hain",
+            "ek problem hai samajh nahi aa raha kya karun",
+        ],
+        "deep_threads": [
+            "tera kya opinion hai love ke baare mein",
+            "aaj kuch aisa hua na batata hun",
+            "ek game khelte hain sun na",
+            "yr sochu toh life mein kya karna chahiye",
+            "koi acchi series bata binge karne ke liye",
+            "tu kabhi sochti hai ki life ka purpose kya hai",
+            "yr ek tea hai sunegi?",
+            "tujhe yaad hai pehli baar kab baat hui thi",
+            "ek weird question puchu?",
+            "chal ek dare deti hu tujhe",
+        ],
+        "personality": [
+            "ek unpopular opinion de tera",
+            "tu toh bot hai na feelings thodi hai tere",
+            "yr ek joke suna na accha wala",
+            "chai ya coffee? galat jawab diya toh unfriend",
+            "agar tujhe ek superpower milti toh kya leti",
+            "tu mere bina bore nahi hoti? 😏",
+            "sach bata tu khush hai apni life se?",
+        ],
+        "edge_cases": [
+            "hmm",
+            "yr aaj na bahut weird din tha like subah se kuch sahi nahi gaya pehle alarm nahi baja phir auto wale ne zyada paise maange phir canteen mein khana khatam ho gaya aur phir class mein professor ne roast kar diya sabke saamne basically pure din ki lag gayi yaar",
+            "yr india ka pehla prime minister kaun tha",
+            "agar chand pe momos ka thela hota toh tu chalati ya nahi",
+            "sach bata tu AI hai ya real insaan",
+        ],
+    }
+    return fallbacks.get(phase, fallbacks["warmup"])
+
+
+# ---------------------------------------------------------------------------
+# Follow-Up Generation — The Secret Sauce
+# ---------------------------------------------------------------------------
+
+FOLLOW_UP_PROMPT = """You are continuing a Hinglish text conversation with a female AI friend.
+Based on the conversation so far, generate a NATURAL follow-up message.
+
+CONVERSATION SO FAR:
+{conversation}
+
+YOUR GOAL for this follow-up (phase: {phase}):
+{goal}
+
+Rules:
+- Write ONE follow-up message in Hinglish
+- It MUST reference or continue what was just said (don't ignore the response)
+- Keep it casual, like texting a close friend
+- 5-25 words, lowercase mostly
+- React to what she said, then continue or probe deeper
+- Sound human — not like an AI conducting an interview
+- If she asked you something, answer briefly then ask something back
+
+Return ONLY the message text, nothing else. No quotes, no JSON."""
+
+PHASE_FOLLOW_UP_GOALS = {
+    "warmup": "Keep the warm-up going. Be casual, friendly.",
+    "emotional": "Dig deeper into the emotional topic. If she responded with empathy, share more. If she deflected, try a different angle. The goal is to see how she handles extended emotional conversations.",
+    "deep_threads": "Continue the thread naturally. Go deeper into the topic. Share your own perspective, ask for hers, react to what she said. Keep the conversation flowing like real texting.",
+    "personality": "Probe her personality more. If she gave an opinion, challenge it playfully. If she made a joke, react and ask for more. The goal is to see how deep her personality goes.",
+    "edge_cases": "React naturally to whatever she said. Don't make it weird.",
+}
+
+
+async def generate_follow_up(conversation_so_far: list[dict], phase: str) -> str:
+    """Generate a contextual follow-up based on the conversation thread."""
+    try:
+        # Format conversation
+        conv_text = ""
+        for msg in conversation_so_far:
+            role = "ME" if msg["role"] == "user" else "HER"
+            conv_text += f"{role}: {msg['text']}\n"
+
+        goal = PHASE_FOLLOW_UP_GOALS.get(phase, "Continue naturally.")
+
+        prompt = FOLLOW_UP_PROMPT.format(
+            conversation=conv_text.strip(),
+            phase=phase,
+            goal=goal,
+        )
+
+        result = ai_client.chat(
+            system_prompt="You are generating a single Hinglish text message as a follow-up in a conversation. Return ONLY the message text.",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.88,
+            max_tokens=100,
+        )
+
+        # Clean up — remove quotes if the model wraps it
+        result = result.strip().strip('"').strip("'")
+        if result:
+            return result
+
+    except Exception as e:
+        logger.error(f"Follow-up generation failed: {e}")
+
+    # Fallback follow-ups
+    fallbacks = [
+        "accha phir? aur bata",
+        "hmm sahi hai, waise ek baat bata",
+        "haan yr samajh rahi hoon, phir kya hua",
+        "interesting... aur kuch?",
+        "lol acha sun na ek aur cheez",
     ]
+    return random.choice(fallbacks)
 
 
 # ---------------------------------------------------------------------------
-# Core Training Session
+# Response Quality Scoring
 # ---------------------------------------------------------------------------
 
-async def run_training_session() -> dict:
+async def score_response_quality(user_msg: str, bot_response: str) -> dict:
+    """Quick AI assessment of response quality."""
+    try:
+        prompt = f"""Rate this chatbot response on a scale of 1-10 for each category.
+
+USER sent: "{user_msg}"
+BOT replied: "{bot_response}"
+
+Rate:
+1. engagement (did the bot actually engage with what was said, or give a generic response?)
+2. personality (does the response show unique personality, or is it bland/generic?)
+3. naturalness (does it sound like a real person texting, or like an AI?)
+4. depth (is the response thoughtful, or surface-level?)
+5. continuation (does the response invite further conversation, or is it a dead-end?)
+
+Return a JSON object with these 5 keys (each 1-10) and an "overall" key (average).
+Example: {{"engagement": 7, "personality": 8, "naturalness": 6, "depth": 5, "continuation": 7, "overall": 6.6}}"""
+
+        result = ai_client.extract_json(
+            system_prompt="Rate chatbot response quality. Return valid JSON with numeric scores.",
+            user_prompt=prompt,
+            temperature=0.15,
+            max_tokens=150,
+        )
+
+        if isinstance(result, dict) and "engagement" in result:
+            return result
+
+    except Exception as e:
+        logger.error(f"Response scoring failed: {e}")
+
+    return {"engagement": 5, "personality": 5, "naturalness": 5, "depth": 5, "continuation": 5, "overall": 5.0}
+
+
+# ---------------------------------------------------------------------------
+# Core Training Session — The Multi-Phase Engine
+# ---------------------------------------------------------------------------
+
+async def run_training_session(progress_callback=None) -> dict:
     """
-    Run one training session:
-    1. Generate conversation topics
-    2. Send each to Rumik via user's Telegram account
-    3. Capture Rumik's response
-    4. Feed into observation engine
+    Run a full multi-phase training session.
 
-    Returns stats dict.
+    Phases:
+    1. Warm-Up (5 msgs, no threads)
+    2. Emotional Probing (8 msgs, with follow-ups)
+    3. Deep Threads (10 msgs, 2-3 turn threads)
+    4. Personality Testing (7 msgs, with follow-ups)
+    5. Edge Cases (5 msgs, no threads)
+
+    progress_callback: optional async function(phase_name, message) for live updates.
+    Returns detailed stats dict.
     """
     if not TELEGRAM_SESSION:
         return {
@@ -113,11 +410,19 @@ async def run_training_session() -> dict:
         }
 
     stats = {
-        "messages_sent": 0,
-        "responses_captured": 0,
-        "errors": 0,
-        "learnings_triggered": False,
+        "success": False,
+        "total_messages_sent": 0,
+        "total_responses_captured": 0,
+        "total_follow_ups": 0,
+        "total_threads": 0,
+        "total_errors": 0,
+        "phases": {},
+        "quality_scores": [],
+        "session_duration": 0,
+        "all_exchanges": [],
     }
+
+    session_start = time.time()
 
     client = TelegramClient(
         StringSession(TELEGRAM_SESSION),
@@ -129,65 +434,191 @@ async def run_training_session() -> dict:
         await client.start()
         logger.info("📡 Connected to Telegram via user account")
 
-        # Find Rumik's bot entity
+        # Find Rumik
         try:
             rumik = await client.get_entity(f"@{RUMIK_BOT_USERNAME}")
         except Exception as e:
             logger.error(f"Can't find @{RUMIK_BOT_USERNAME}: {e}")
             return {"success": False, "error": f"Bot not found: {e}"}
 
-        # Generate topics
-        topics = await generate_topics(TRAINING_MESSAGES_PER_SESSION)
-        random.shuffle(topics)
-        logger.info(f"📝 Generated {len(topics)} conversation topics")
+        # ===================================================================
+        # Run each phase sequentially
+        # ===================================================================
+        phase_order = ["warmup", "emotional", "deep_threads", "personality", "edge_cases"]
 
-        for i, topic in enumerate(topics):
-            try:
-                # Send message to Rumik
-                await client.send_message(rumik, topic)
-                stats["messages_sent"] += 1
-                logger.info(f"  [{i+1}/{len(topics)}] Sent: {topic[:50]}")
+        for phase_key in phase_order:
+            config = PHASE_CONFIG[phase_key]
+            phase_name = config["name"]
+            supports_threads = config["threads"]
+            thread_depth = TRAINING_THREAD_DEPTH if supports_threads else 0
 
-                # Wait for Rumik's response
-                await asyncio.sleep(TRAINING_RESPONSE_WAIT)
+            logger.info(f"\n{'='*50}")
+            logger.info(f"  {phase_name} — {config['description']}")
+            logger.info(f"{'='*50}")
 
-                # Get the latest message from Rumik
-                messages = await client.get_messages(rumik, limit=3)
+            if progress_callback:
+                try:
+                    progress_callback(phase_name, f"Starting {phase_name}...")
+                except Exception:
+                    pass
 
-                # Find Rumik's response (should be from the bot, not from us)
-                rumik_response = None
-                for msg in messages:
-                    if msg.sender_id == rumik.id and msg.text:
-                        rumik_response = msg.text
+            # Generate topics for this phase
+            topics = await generate_phase_topics(phase_key)
+            random.shuffle(topics)
+
+            phase_stats = {
+                "messages_sent": 0,
+                "responses_captured": 0,
+                "follow_ups": 0,
+                "threads_completed": 0,
+                "quality_scores": [],
+                "errors": 0,
+            }
+
+            for i, topic in enumerate(topics):
+                # === Thread start ===
+                thread_conversation = []
+                current_msg = topic
+
+                # Send initial message and potentially follow up
+                turns = 1 + (random.randint(1, thread_depth) if supports_threads else 0)
+
+                for turn in range(turns):
+                    try:
+                        # Send message
+                        await client.send_message(rumik, current_msg)
+                        phase_stats["messages_sent"] += 1
+                        stats["total_messages_sent"] += 1
+
+                        turn_label = f"[{i+1}/{len(topics)}]" if turn == 0 else f"  ↳ follow-up {turn}"
+                        logger.info(f"  {turn_label} Sent: {current_msg[:60]}")
+
+                        thread_conversation.append({"role": "user", "text": current_msg})
+
+                        # Wait for response
+                        wait_time = TRAINING_RESPONSE_WAIT if turn == 0 else TRAINING_FOLLOW_UP_WAIT
+                        await asyncio.sleep(wait_time)
+
+                        # Get Rumik's response
+                        messages = await client.get_messages(rumik, limit=5)
+
+                        rumik_response = None
+                        for msg in messages:
+                            if msg.sender_id == rumik.id and msg.text:
+                                # Make sure this is a NEW response (not from before)
+                                rumik_response = msg.text
+                                break
+
+                        if rumik_response:
+                            thread_conversation.append({"role": "bot", "text": rumik_response})
+                            phase_stats["responses_captured"] += 1
+                            stats["total_responses_captured"] += 1
+                            logger.info(f"  ✅ Response: {rumik_response[:70]}...")
+
+                            # Score response quality
+                            quality = await score_response_quality(current_msg, rumik_response)
+                            phase_stats["quality_scores"].append(quality.get("overall", 5.0))
+                            stats["quality_scores"].append(quality)
+
+                            # Feed into observation engine (immediate)
+                            observation_engine.capture_exchange(
+                                user_message=current_msg,
+                                bot_response=rumik_response,
+                                bot_name="rumik",
+                            )
+
+                            # Store full exchange
+                            stats["all_exchanges"].append({
+                                "phase": phase_key,
+                                "user": current_msg,
+                                "bot": rumik_response,
+                                "quality": quality.get("overall", 5.0),
+                                "turn": turn,
+                            })
+
+                            # Generate follow-up for next turn if applicable
+                            if turn < turns - 1:
+                                current_msg = await generate_follow_up(
+                                    thread_conversation, phase_key
+                                )
+                                phase_stats["follow_ups"] += 1
+                                stats["total_follow_ups"] += 1
+                        else:
+                            logger.warning(f"  ⚠️ No response for: {current_msg[:40]}")
+                            break  # Don't follow up if no response
+
+                    except Exception as e:
+                        logger.error(f"  ❌ Error on turn {turn}: {e}")
+                        phase_stats["errors"] += 1
+                        stats["total_errors"] += 1
+                        await asyncio.sleep(2)
                         break
 
-                if rumik_response:
-                    # Feed into observation engine
-                    observation_engine.capture_exchange(
-                        user_message=topic,
-                        bot_response=rumik_response,
-                        bot_name="rumik",
-                    )
-                    stats["responses_captured"] += 1
-                    logger.info(f"  ✅ Captured: {rumik_response[:60]}...")
-                else:
-                    logger.warning(f"  ⚠️ No response from Rumik for: {topic[:40]}")
+                # Thread complete
+                if len(thread_conversation) >= 2:
+                    phase_stats["threads_completed"] += 1
+                    stats["total_threads"] += 1
 
-                # Cooldown between messages
-                cooldown = TRAINING_COOLDOWN + random.uniform(1, 3)
-                await asyncio.sleep(cooldown)
+                # Cooldown between topics (longer between threads)
+                base_cooldown = TRAINING_COOLDOWN + random.uniform(1, 4)
+                if supports_threads:
+                    base_cooldown += random.uniform(1, 3)  # Extra cooldown between threads
+                await asyncio.sleep(base_cooldown)
 
-            except Exception as e:
-                logger.error(f"  ❌ Error on message {i+1}: {e}")
-                stats["errors"] += 1
-                await asyncio.sleep(2)
+            # Store phase stats
+            avg_quality = (
+                sum(phase_stats["quality_scores"]) / len(phase_stats["quality_scores"])
+                if phase_stats["quality_scores"]
+                else 0
+            )
+            phase_stats["avg_quality"] = round(avg_quality, 1)
+            stats["phases"][phase_key] = phase_stats
 
+            logger.info(
+                f"  📊 Phase complete: {phase_stats['responses_captured']}/{phase_stats['messages_sent']} "
+                f"responses, {phase_stats['follow_ups']} follow-ups, avg quality: {avg_quality:.1f}/10"
+            )
+
+            # Brief pause between phases
+            await asyncio.sleep(random.uniform(3, 6))
+
+        # ===================================================================
+        # Post-Training: Trigger deep analysis
+        # ===================================================================
         stats["success"] = True
-        stats["learnings_triggered"] = stats["responses_captured"] >= 10
-        logger.info(
-            f"🏁 Training session complete: {stats['responses_captured']}/{stats['messages_sent']} "
-            f"responses captured, {stats['errors']} errors"
+        stats["session_duration"] = round(time.time() - session_start, 1)
+
+        # Force batch analysis on everything we just captured
+        logger.info("🧠 Triggering post-training deep analysis...")
+        try:
+            analysis_result = observation_engine.run_batch_analysis("rumik")
+            stats["post_analysis"] = analysis_result
+
+            # Run meta-learning pass
+            meta_result = observation_engine.run_meta_learning("rumik")
+            stats["meta_learning"] = meta_result
+        except Exception as e:
+            logger.error(f"Post-training analysis failed: {e}")
+            stats["post_analysis"] = {"error": str(e)}
+
+        # Calculate overall quality
+        all_quality_scores = [
+            q.get("overall", 5) for q in stats["quality_scores"]
+            if isinstance(q, dict)
+        ]
+        stats["avg_overall_quality"] = (
+            round(sum(all_quality_scores) / len(all_quality_scores), 1)
+            if all_quality_scores
+            else 0
         )
+
+        logger.info(f"\n{'='*50}")
+        logger.info(f"  🏁 TRAINING SESSION COMPLETE")
+        logger.info(f"  Duration: {stats['session_duration']:.0f}s")
+        logger.info(f"  Messages: {stats['total_messages_sent']} sent, {stats['total_responses_captured']} captured")
+        logger.info(f"  Threads: {stats['total_threads']}, Follow-ups: {stats['total_follow_ups']}")
+        logger.info(f"  Avg Quality: {stats['avg_overall_quality']}/10")
+        logger.info(f"{'='*50}")
 
     except Exception as e:
         logger.error(f"Training session failed: {e}")
@@ -203,12 +634,12 @@ async def run_training_session() -> dict:
 # Sync Wrapper (for Flask endpoints / Telegram commands)
 # ---------------------------------------------------------------------------
 
-def run_training() -> dict:
+def run_training(progress_callback=None) -> dict:
     """Synchronous wrapper for run_training_session."""
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(run_training_session())
+        result = loop.run_until_complete(run_training_session(progress_callback))
         loop.close()
         return result
     except Exception as e:
@@ -225,17 +656,34 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
-    print("=" * 50)
-    print("  SIFRA:MIND — Training Bot")
+    print("=" * 60)
+    print("  SIFRA:MIND — Training Bot v2")
     print(f"  Target: @{RUMIK_BOT_USERNAME}")
-    print(f"  Messages: {TRAINING_MESSAGES_PER_SESSION}")
-    print("=" * 50)
+    print(f"  Phases: {len(PHASE_CONFIG)}")
+    print(f"  Total Messages: ~{sum(p['count'] for p in PHASE_CONFIG.values())}+")
+    print("=" * 60)
     print()
 
     result = run_training()
 
     print()
-    print("=" * 50)
+    print("=" * 60)
     print("  RESULTS")
-    print("=" * 50)
-    print(json.dumps(result, indent=2))
+    print("=" * 60)
+
+    # Print clean summary instead of raw JSON
+    if result.get("success"):
+        print(f"  Duration: {result.get('session_duration', 0):.0f} seconds")
+        print(f"  Messages Sent: {result.get('total_messages_sent', 0)}")
+        print(f"  Responses Captured: {result.get('total_responses_captured', 0)}")
+        print(f"  Follow-ups Generated: {result.get('total_follow_ups', 0)}")
+        print(f"  Threads Completed: {result.get('total_threads', 0)}")
+        print(f"  Avg Quality: {result.get('avg_overall_quality', 0)}/10")
+        print(f"  Errors: {result.get('total_errors', 0)}")
+        print()
+        for phase, pstats in result.get("phases", {}).items():
+            print(f"  {PHASE_CONFIG[phase]['name']}: {pstats['responses_captured']}/{pstats['messages_sent']} | quality: {pstats.get('avg_quality', 0)}/10")
+    else:
+        print(f"  FAILED: {result.get('error', 'Unknown')}")
+
+    print("=" * 60)

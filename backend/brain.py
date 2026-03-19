@@ -119,15 +119,23 @@ If you want to react to Harkamal's last message with an emoji, include `[REACT: 
 If you want to send a sticker after your message, include `[STICKER: emotion]` anywhere in your response. Valid emotions: happy, excited, sad, stressed, anxious, bored, angry, neutral, tired, curious, playful, frustrated, nostalgic, lonely, grateful, confused, romantic. (e.g. `[STICKER: playful]`).
 Do NOT use these in every message. Only when it truly fits."""
 
-    # Layer 7: Learned behaviors from observing other bots
+    # Layer 7: Learned behaviors from observing other bots (Enhanced v2)
     learned_behaviors = get_learnings_for_prompt()
     if learned_behaviors:
         prompt += f"""
 
-[LEARNED CONVERSATION TECHNIQUES]
-From studying real human-like conversations, you've picked up these techniques.
-Adapt and use them naturally — don't copy exactly, make them YOUR style:
-{learned_behaviors}"""
+[LEARNED CONVERSATION TECHNIQUES — ACTIVELY APPLY THESE]
+You've studied real human-like chatbot conversations and learned these techniques.
+These are NOT just observations — these are CHANGES you must actively make to how you talk.
+
+⚠️ IMPORTANT: The "KEY BEHAVIORAL DIRECTIVES" section below contains your HIGHEST PRIORITY
+improvements. These are specific things you MUST start doing differently in your responses.
+Don't just acknowledge them — IMPLEMENT them in every response.
+
+{learned_behaviors}
+
+Remember: These learnings should feel natural. Don't force them all at once.
+Pick the most relevant ones for each conversation moment and apply them smoothly."""
 
     return prompt
 

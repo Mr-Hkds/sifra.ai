@@ -90,8 +90,8 @@ SEARCH_QUERY_TEMPERATURE = 0.30   # Balanced for query extraction
 # ---------------------------------------------------------------------------
 RUMIK_BOT_USERNAME = "irarumikbot"
 OBSERVATION_BATCH_SIZE = 10          # Analyze after this many observations
-OBSERVATION_MAX_LEARNINGS = 50       # Max stored learning patterns
-OBSERVATION_ANALYSIS_TEMPERATURE = 0.35  # Balanced for pattern extraction
+OBSERVATION_MAX_LEARNINGS = 80       # Max stored learning patterns (up from 50)
+OBSERVATION_ANALYSIS_TEMPERATURE = 0.40  # Slightly higher for richer patterns
 
 # ---------------------------------------------------------------------------
 # Auto-Training Bot (Telethon — direct Rumik conversations)
@@ -99,12 +99,14 @@ OBSERVATION_ANALYSIS_TEMPERATURE = 0.35  # Balanced for pattern extraction
 TELEGRAM_API_ID = int(os.environ.get("TELEGRAM_API_ID", "33754919"))
 TELEGRAM_API_HASH = os.environ.get("TELEGRAM_API_HASH", "cd3ec4b240056a9a1d5655d9971fa07f")
 TELEGRAM_SESSION = os.environ.get("TELEGRAM_SESSION", "")  # StringSession
-TRAINING_MESSAGES_PER_SESSION = 15    # Messages per training run
-TRAINING_RESPONSE_WAIT = 10          # Seconds to wait for Rumik's reply
-TRAINING_COOLDOWN = 3                # Seconds between messages
+TRAINING_MESSAGES_PER_SESSION = 35    # Messages per training run (up from 15)
+TRAINING_RESPONSE_WAIT = 12          # Seconds to wait for Rumik's reply
+TRAINING_COOLDOWN = 4                # Seconds between messages
+TRAINING_THREAD_DEPTH = 3            # Max follow-ups per conversation thread
+TRAINING_FOLLOW_UP_WAIT = 8          # Seconds to wait before sending follow-up
 
 # ---------------------------------------------------------------------------
 # Version
 # ---------------------------------------------------------------------------
-VERSION = "3.3.0"
+VERSION = "3.4.0"
 BUILD_DATE = "2026-03-19"

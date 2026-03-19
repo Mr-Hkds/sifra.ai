@@ -287,26 +287,71 @@ def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
 
 
 def _start_training(chat_id: int | str) -> dict:
-    """Start an auto-training session via admin command."""
-    send_message(chat_id, f"🚀 <b>Starting auto-training session with @{RUMIK_BOT_USERNAME}...</b>\n\nThis will take a few minutes as I generate topics, send them, and wait for responses.")
+    """Start an auto-training session via admin command. Enhanced v2 with phase reports."""
+    send_message(
+        chat_id,
+        f"🚀 <b>Starting Multi-Phase Training Session v2</b>\n\n"
+        f"Target: @{RUMIK_BOT_USERNAME}\n"
+        f"Phases: Warm-Up → Emotional → Deep Threads → Personality → Edge Cases\n"
+        f"Estimated: ~35+ messages, 8-12 minutes\n\n"
+        f"I'll send phase updates as we go..."
+    )
 
     import threading
-    from training_bot import run_training
+    from training_bot import run_training, PHASE_CONFIG
+
+    def _progress(phase_name, message):
+        """Send live progress updates."""
+        try:
+            send_message(chat_id, f"⏳ {phase_name}: {message}")
+        except Exception:
+            pass
 
     def _run():
-        result = run_training()
+        result = run_training(progress_callback=_progress)
         if result.get("success"):
+            # Build detailed report
+            duration = result.get('session_duration', 0)
+            mins = int(duration // 60)
+            secs = int(duration % 60)
+
             msg = (
                 f"✅ <b>Training Session Complete!</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"<b>Messages Sent:</b> {result.get('messages_sent', 0)}\n"
-                f"<b>Responses Captured:</b> {result.get('responses_captured', 0)}\n"
-                f"<b>Errors:</b> {result.get('errors', 0)}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"⏱ Duration: <b>{mins}m {secs}s</b>\n"
+                f"📤 Messages Sent: <b>{result.get('total_messages_sent', 0)}</b>\n"
+                f"📥 Responses Captured: <b>{result.get('total_responses_captured', 0)}</b>\n"
+                f"🔁 Follow-ups Generated: <b>{result.get('total_follow_ups', 0)}</b>\n"
+                f"🧵 Threads Completed: <b>{result.get('total_threads', 0)}</b>\n"
+                f"⭐ Avg Quality: <b>{result.get('avg_overall_quality', 0)}/10</b>\n"
+                f"❌ Errors: {result.get('total_errors', 0)}\n\n"
             )
-            if result.get('learnings_triggered'):
-                msg += "🧠 Batch analysis triggered! Sifra is synthesizing new patterns."
-            else:
-                msg += "Not enough observations for a batch yet."
+
+            # Per-phase breakdown
+            msg += "<b>Phase Breakdown:</b>\n"
+            phases = result.get("phases", {})
+            for phase_key, pstats in phases.items():
+                phase_name = PHASE_CONFIG.get(phase_key, {}).get("name", phase_key)
+                captured = pstats.get("responses_captured", 0)
+                sent = pstats.get("messages_sent", 0)
+                quality = pstats.get("avg_quality", 0)
+                follow = pstats.get("follow_ups", 0)
+                msg += f"  {phase_name}: {captured}/{sent}"
+                if follow:
+                    msg += f" (+{follow} follow-ups)"
+                msg += f" — quality: {quality}/10\n"
+
+            # Post-training analysis
+            post = result.get("post_analysis", {})
+            if post and not post.get("error"):
+                msg += f"\n🧠 <b>Deep Analysis:</b> {post.get('patterns_found', 0)} new patterns extracted"
+
+            meta = result.get("meta_learning", {})
+            if meta and meta.get("directives_generated", 0) > 0:
+                msg += f"\n🎯 <b>Meta-Learning:</b> {meta['directives_generated']} behavioral directives generated"
+
+            msg += "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            msg += "\n<i>Use /sifra_learn_status to see what I learned!</i>"
         else:
             err = result.get('error', 'Unknown error')
             msg = f"❌ <b>Training Failed</b>\n{err}"
@@ -315,10 +360,10 @@ def _start_training(chat_id: int | str) -> dict:
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
-    return {"success": True, "reply": "training started"}
+    return {"success": True, "reply": "training v2 started"}
 
 def _send_learn_status(chat_id: int | str) -> dict:
-    """Send observation learning stats via Telegram."""
+    """Send observation learning stats via Telegram. Enhanced v2."""
     stats = get_observation_stats()
     from supabase_client import get_all_learnings
     learnings = get_all_learnings()
@@ -334,12 +379,35 @@ def _send_learn_status(chat_id: int | str) -> dict:
     )
 
     if learnings:
-        msg += "\n<b>What I've learned:</b>\n"
-        for l in learnings[:8]:
+        # Separate meta-directives from regular patterns
+        meta_directives = [l for l in learnings if l.get('category') == 'meta_directive']
+        regular = [l for l in learnings if l.get('category') != 'meta_directive']
+
+        # Count by category
+        cat_counts: dict[str, int] = {}
+        for l in regular:
             cat = l.get('category', '?')
-            pattern = l.get('pattern', '')[:80]
-            conf = l.get('confidence', 0)
-            msg += f"• [{cat}] {pattern} <i>({conf:.0%})</i>\n"
+            cat_counts[cat] = cat_counts.get(cat, 0) + 1
+
+        if cat_counts:
+            msg += "\n<b>Patterns by Category:</b>\n"
+            for cat, count in sorted(cat_counts.items(), key=lambda x: -x[1]):
+                msg += f"  • {cat}: {count}\n"
+
+        if meta_directives:
+            msg += f"\n🎯 <b>Active Behavioral Directives ({len(meta_directives)}):</b>\n"
+            for m in meta_directives[:5]:
+                pattern = m.get('pattern', '')[:100]
+                conf = m.get('confidence', 0)
+                msg += f"  → {pattern} <i>({conf:.0%})</i>\n"
+
+        if regular:
+            msg += f"\n<b>Top Patterns ({len(regular)} total):</b>\n"
+            for l in regular[:6]:
+                cat = l.get('category', '?')
+                pattern = l.get('pattern', '')[:70]
+                conf = l.get('confidence', 0)
+                msg += f"  • [{cat}] {pattern} <i>({conf:.0%})</i>\n"
 
     msg += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
     send_message(chat_id, msg)
