@@ -189,29 +189,26 @@ def _suggest_response_length(message_length: str, pace: str, energy: str, phase:
     Suggest how long Sifra's response should be.
     This is a HINT, not a hard rule.
     """
-    # Short input = short output (the #1 rule for sounding human)
-    if message_length == "very_short":
-        return "one_word"  # "lol", "hmm", "sahi"
-    if message_length == "short" and energy != "high":
-        return "short"     # 3-8 words
+    # If the user gives a one word reply and we are winding down, it's fine to reply short.
+    # But if it's mid_flow or opening, don't just say 'hmm'.
+    if message_length == "very_short" and phase == "winding_down":
+        return "one_word"
     
-    # Rapid pace = keep it snappy
-    if pace == "rapid":
-        return "short"
-    
-    # Opening phase = not too long, not too short
-    if phase == "opening":
+    if message_length in ("very_short", "short") and phase != "winding_down":
+        # User is being brief, Sifra should try to carry the conversation by giving medium responses 
+        # or asking a question to spark things up.
         return "medium"
+    
+    # Rapid pace = keep it snappy but don't strictly require 'short'. 
+    if pace == "rapid" and energy != "high":
+        return "short"
     
     # Long emotional input = longer response
     if message_length == "long" and energy != "low":
         return "long"
     
-    # Winding down = keep it brief
-    if phase == "winding_down":
-        return "short"
-    
-    return "medium"  # Default
+    # Default is medium / chatty
+    return "medium"
 
 
 # ---------------------------------------------------------------------------

@@ -29,9 +29,9 @@ CORE_RULES_PATTERN = re.compile(
     r"sifra,?\s*update\s+core\s+rules?:\s*(.+)", re.IGNORECASE | re.DOTALL
 )
 
-# Reaction and sticker probability
-REACTION_CHANCE = 0.35       # 35% chance to react to a message
-STICKER_CHANCE = 0.15        # 15% chance to send a sticker after reply
+# Regex to catch AI-controlled actions
+ACTION_REACT_PATTERN = re.compile(r"\[REACT:\s*(.+?)\]", re.IGNORECASE)
+ACTION_STICKER_PATTERN = re.compile(r"\[STICKER:\s*(.+?)\]", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -81,31 +81,27 @@ MOOD_REACTIONS = {
 GENERIC_REACTIONS = ["👍", "👀", "😂", "🔥", "❤️", "💀"]
 
 
-def react_to_message(chat_id: int | str, message_id: int, emotion: str) -> bool:
-    """Set an emoji reaction on a user's message."""
+def react_to_message_explicit(chat_id: int | str, message_id: int, emoji: str) -> bool:
+    """Set a specific emoji reaction on a user's message."""
     try:
-        # Pick a relevant emoji based on detected mood
-        emojis = MOOD_REACTIONS.get(emotion, GENERIC_REACTIONS)
-        chosen_emoji = random.choice(emojis)
-
         resp = requests.post(
             f"{TELEGRAM_API}/setMessageReaction",
             json={
                 "chat_id": chat_id,
                 "message_id": message_id,
-                "reaction": [{"type": "emoji", "emoji": chosen_emoji}],
-                "is_big": random.random() < 0.1,  # 10% chance of big reaction
+                "reaction": [{"type": "emoji", "emoji": emoji}],
+                "is_big": random.random() < 0.2,  # 20% chance of big reaction if AI chooses it
             },
             timeout=5,
         )
         if resp.status_code == 200:
-            logger.info(f"Reacted with {chosen_emoji} to message {message_id}")
+            logger.info(f"Explicitly reacted with {emoji} to message {message_id}")
             return True
         else:
             logger.warning(f"Reaction failed: {resp.status_code} - {resp.text[:100]}")
             return False
     except Exception as e:
-        logger.error(f"react_to_message failed: {e}")
+        logger.error(f"react_to_message_explicit failed: {e}")
         return False
 
 
@@ -160,10 +156,10 @@ def _fetch_sticker_set(set_name: str) -> list[str]:
         return []
 
 
-def send_sticker(chat_id: int | str, emotion: str) -> bool:
-    """Send a random relevant sticker based on the detected emotion."""
+def send_sticker_explicit(chat_id: int | str, emotion_label: str) -> bool:
+    """Send a sticker explicitly requested by the AI based on a mood/emotion label."""
     try:
-        mood_category = EMOTION_TO_STICKER_MOOD.get(emotion, "funny")
+        mood_category = EMOTION_TO_STICKER_MOOD.get(emotion_label.lower(), "funny")
         set_names = STICKER_SETS.get(mood_category, STICKER_SETS["funny"])
 
         # Try sticker sets until we find one that works
@@ -178,13 +174,13 @@ def send_sticker(chat_id: int | str, emotion: str) -> bool:
                     timeout=10,
                 )
                 if resp.status_code == 200:
-                    logger.info(f"Sent sticker from {set_name} for emotion: {emotion}")
+                    logger.info(f"Sent sticker from {set_name} for requested emotion: {emotion_label}")
                     return True
 
-        logger.warning(f"No sticker sets available for emotion: {emotion}")
+        logger.warning(f"No sticker sets available for requested emotion: {emotion_label}")
         return False
     except Exception as e:
-        logger.error(f"send_sticker failed: {e}")
+        logger.error(f"send_sticker_explicit failed: {e}")
         return False
 
 
@@ -480,35 +476,49 @@ def process_update(update: dict) -> dict:
             web_search_results=search_results,
         )
 
-        # --- Step 7: Save Sifra's response ---
+        # --- Step 7: Parse internal AI actions ---
+        # Parse reactions
+        react_match = ACTION_REACT_PATTERN.search(reply)
+        react_emoji = react_match.group(1).strip() if react_match else None
+        if react_match:
+            reply = ACTION_REACT_PATTERN.sub("", reply).strip()
+
+        # Parse stickers
+        sticker_match = ACTION_STICKER_PATTERN.search(reply)
+        sticker_mood = sticker_match.group(1).strip() if sticker_match else None
+        if sticker_match:
+            reply = ACTION_STICKER_PATTERN.sub("", reply).strip()
+
+        # --- Step 8: Save Sifra's response ---
         save_conversation(
             "sifra", reply,
             mood_detected=context["sentiment"].emotion,
             platform="telegram",
         )
 
-        # --- Step 8: React to user's message (random, mood-based) ---
-        message_id = message.get("message_id")
-        if message_id and random.random() < REACTION_CHANCE:
-            # Run reaction in background to not slow down reply
+        # --- Step 9: React to user's message if AI asked to ---
+        if react_emoji:
+            message_id = message.get("message_id")
+            if message_id:
+                threading.Thread(
+                    target=react_to_message_explicit,
+                    args=(chat_id, message_id, react_emoji),
+                    daemon=True,
+                ).start()
+
+        # --- Step 10: Send actual reply text ---
+        if reply:
+            send_message(chat_id, reply)
+
+        # --- Step 11: Send sticker if AI asked to ---
+        if sticker_mood:
             threading.Thread(
-                target=react_to_message,
-                args=(chat_id, message_id, user_sentiment.emotion),
+                target=send_sticker_explicit,
+                args=(chat_id, sticker_mood),
                 daemon=True,
             ).start()
 
-        # --- Step 9: Send reply ---
-        send_message(chat_id, reply)
-
-        # --- Step 10: Maybe send a sticker (random, mood-based) ---
-        if random.random() < STICKER_CHANCE:
-            threading.Thread(
-                target=send_sticker,
-                args=(chat_id, user_sentiment.emotion),
-                daemon=True,
-            ).start()
-
-        # --- Step 11: Update state ---
+        # --- Step 12: Update state ---
         update_sifra_state({
             "current_mood": context["sentiment"].emotion,
             "personality_mode": context["personality_mode"],

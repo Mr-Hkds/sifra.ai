@@ -110,6 +110,14 @@ Mode: {personality_mode}"""
                 f"Drop it casually like 'waise yaad aaya...' — don't force it."
             )
 
+    # Layer 6: Actions
+    prompt += """
+
+[ACTIONS you can take]
+If you want to react to Harkamal's last message with an emoji, include `[REACT: emoji]` anywhere in your response (e.g. `[REACT: 😂]`).
+If you want to send a sticker after your message, include `[STICKER: emotion]` anywhere in your response. Valid emotions: happy, excited, sad, stressed, anxious, bored, angry, neutral, tired, curious, playful, frustrated, nostalgic, lonely, grateful, confused, romantic. (e.g. `[STICKER: playful]`).
+Do NOT use these in every message. Only when it truly fits."""
+
     return prompt
 
 
