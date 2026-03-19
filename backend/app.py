@@ -25,6 +25,17 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app, origins=["*"])
 
+@app.before_request
+def handle_options():
+    """Globally catch OPTIONS requests before route matching to guarantee CORS passes."""
+    if request.method == "OPTIONS":
+        resp = app.make_default_options_response()
+        headers = request.headers.get("Access-Control-Request-Headers", "Content-Type, Authorization")
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = headers
+        return resp, 200
+
 
 # ===================================================================
 # TELEGRAM WEBHOOK
