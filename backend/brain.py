@@ -18,6 +18,7 @@ from memory_engine import (
     recall_for_context, format_for_prompt,
     should_spontaneously_recall, get_random_memory,
 )
+from observation_engine import get_learnings_for_prompt
 from config import CONVERSATION_CONTEXT_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,16 @@ Mode: {personality_mode}"""
 If you want to react to Harkamal's last message with an emoji, include `[REACT: emoji]` anywhere in your response (e.g. `[REACT: 😂]`).
 If you want to send a sticker after your message, include `[STICKER: emotion]` anywhere in your response. Valid emotions: happy, excited, sad, stressed, anxious, bored, angry, neutral, tired, curious, playful, frustrated, nostalgic, lonely, grateful, confused, romantic. (e.g. `[STICKER: playful]`).
 Do NOT use these in every message. Only when it truly fits."""
+
+    # Layer 7: Learned behaviors from observing other bots
+    learned_behaviors = get_learnings_for_prompt()
+    if learned_behaviors:
+        prompt += f"""
+
+[LEARNED CONVERSATION TECHNIQUES]
+From studying real human-like conversations, you've picked up these techniques.
+Adapt and use them naturally — don't copy exactly, make them YOUR style:
+{learned_behaviors}"""
 
     return prompt
 

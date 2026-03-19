@@ -86,7 +86,15 @@ SEARCH_INTENT_TEMPERATURE = 0.15   # Deterministic for search intent detection
 SEARCH_QUERY_TEMPERATURE = 0.30   # Balanced for query extraction
 
 # ---------------------------------------------------------------------------
+# Observation Learning (Learn from other bots)
+# ---------------------------------------------------------------------------
+RUMIK_BOT_USERNAME = "irarumikbot"
+OBSERVATION_BATCH_SIZE = 10          # Analyze after this many observations
+OBSERVATION_MAX_LEARNINGS = 50       # Max stored learning patterns
+OBSERVATION_ANALYSIS_TEMPERATURE = 0.35  # Balanced for pattern extraction
+
+# ---------------------------------------------------------------------------
 # Version
 # ---------------------------------------------------------------------------
-VERSION = "3.1.1"
+VERSION = "3.2.0"
 BUILD_DATE = "2026-03-19"

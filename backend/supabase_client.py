@@ -437,3 +437,148 @@ def full_reset() -> dict:
         "conversations_cleared": conversations_cleared,
         "state_reset": True,
     }
+
+
+# ===================================================================
+# OBSERVATION LEARNING (Learn from other bots)
+# ===================================================================
+
+def log_observation(
+    user_message: str,
+    bot_response: str,
+    bot_name: str = "rumik",
+) -> dict | None:
+    """Log a captured bot response for later analysis."""
+    try:
+        data = {
+            "user_message": user_message,
+            "bot_response": bot_response,
+            "bot_name": bot_name,
+            "analyzed": False,
+        }
+        result = get_client().table("observation_log").insert(data).execute()
+        return result.data[0] if result.data else None
+    except Exception as e:
+        logger.error(f"log_observation: {e}")
+        return None
+
+
+def get_unanalyzed_observations(bot_name: str = "rumik", limit: int = 50) -> list[dict]:
+    """Fetch observations that haven't been analyzed yet."""
+    try:
+        result = (
+            get_client()
+            .table("observation_log")
+            .select("*")
+            .eq("bot_name", bot_name)
+            .eq("analyzed", False)
+            .order("created_at")
+            .limit(limit)
+            .execute()
+        )
+        return result.data or []
+    except Exception as e:
+        logger.error(f"get_unanalyzed_observations: {e}")
+        return []
+
+
+def mark_observations_analyzed(observation_ids: list[str]) -> None:
+    """Mark observations as analyzed after batch processing."""
+    try:
+        for obs_id in observation_ids:
+            get_client().table("observation_log").update(
+                {"analyzed": True}
+            ).eq("id", obs_id).execute()
+    except Exception as e:
+        logger.error(f"mark_observations_analyzed: {e}")
+
+
+def upsert_learning(
+    category: str,
+    pattern: str,
+    examples: str = "",
+    confidence: float = 0.7,
+    source_bot: str = "rumik",
+) -> dict | None:
+    """Insert or update a learned pattern. If same category+pattern exists, update."""
+    try:
+        # Check for duplicate
+        existing = (
+            get_client()
+            .table("observation_learnings")
+            .select("*")
+            .eq("category", category)
+            .eq("source_bot", source_bot)
+            .execute()
+        )
+
+        # Check word overlap with existing patterns in same category
+        if existing.data:
+            pattern_words = set(pattern.lower().split())
+            for row in existing.data:
+                existing_words = set(row["pattern"].lower().split())
+                overlap = len(pattern_words & existing_words) / max(len(pattern_words), len(existing_words))
+                if overlap > 0.6:
+                    # Update existing — merge examples, boost confidence
+                    merged_examples = row.get("examples", "") + "\n" + examples
+                    # Keep examples trimmed
+                    merged_lines = merged_examples.strip().split("\n")[-10:]
+                    get_client().table("observation_learnings").update({
+                        "pattern": pattern,
+                        "examples": "\n".join(merged_lines),
+                        "confidence": min(1.0, row.get("confidence", 0.5) + 0.05),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }).eq("id", row["id"]).execute()
+                    return row
+
+        # Insert new
+        data = {
+            "category": category,
+            "pattern": pattern,
+            "examples": examples,
+            "confidence": confidence,
+            "source_bot": source_bot,
+        }
+        result = get_client().table("observation_learnings").insert(data).execute()
+        return result.data[0] if result.data else None
+    except Exception as e:
+        logger.error(f"upsert_learning: {e}")
+        return None
+
+
+def get_all_learnings(source_bot: str = "rumik") -> list[dict]:
+    """Get all learned patterns from a source bot."""
+    try:
+        result = (
+            get_client()
+            .table("observation_learnings")
+            .select("*")
+            .eq("source_bot", source_bot)
+            .order("confidence", desc=True)
+            .execute()
+        )
+        return result.data or []
+    except Exception as e:
+        logger.error(f"get_all_learnings: {e}")
+        return []
+
+
+def get_observation_stats(bot_name: str = "rumik") -> dict:
+    """Get stats about observations and learnings."""
+    try:
+        logs = get_client().table("observation_log").select("id, analyzed").eq("bot_name", bot_name).execute()
+        learnings = get_client().table("observation_learnings").select("id").eq("source_bot", bot_name).execute()
+
+        total_obs = len(logs.data) if logs.data else 0
+        analyzed = sum(1 for r in (logs.data or []) if r.get("analyzed"))
+
+        return {
+            "total_observations": total_obs,
+            "analyzed": analyzed,
+            "pending": total_obs - analyzed,
+            "learnings_count": len(learnings.data) if learnings.data else 0,
+        }
+    except Exception as e:
+        logger.error(f"get_observation_stats: {e}")
+        return {"total_observations": 0, "analyzed": 0, "pending": 0, "learnings_count": 0}
+

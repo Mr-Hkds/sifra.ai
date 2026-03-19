@@ -1,7 +1,7 @@
 """
 SIFRA:MIND — Telegram Handler.
 Clean orchestration pipeline: message → sentiment → context → brain → quality → send.
-No more scattered logic or wrong-mood GIFs.
+Also handles group observation for learning from other bots.
 """
 
 import os
@@ -17,10 +17,12 @@ import context_engine
 import brain
 import memory_engine
 import web_search
+import observation_engine
 from supabase_client import (
     save_conversation, get_conversations, get_sifra_state, update_sifra_state,
+    get_observation_stats,
 )
-from config import TELEGRAM_BOT_TOKEN, USER_TELEGRAM_ID, WEBHOOK_SECRET
+from config import TELEGRAM_BOT_TOKEN, USER_TELEGRAM_ID, WEBHOOK_SECRET, RUMIK_BOT_USERNAME
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,9 @@ CORE_RULES_PATTERN = re.compile(
 # Regex to catch AI-controlled actions
 ACTION_REACT_PATTERN = re.compile(r"\[REACT:\s*(.+?)\]", re.IGNORECASE)
 ACTION_STICKER_PATTERN = re.compile(r"\[STICKER:\s*(.+?)\]", re.IGNORECASE)
+
+# Track recent user messages in groups for pairing with bot responses
+_recent_group_user_messages: dict[int, str] = {}  # chat_id → last user message
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +229,7 @@ ADMIN_COMMANDS = {
     "/sifra_reset": "Full factory reset",
     "/sifra_clear_mem": "Clear all memories",
     "/sifra_clear_conv": "Clear all conversations",
+    "/sifra_learn_status": "Show observation learning stats",
     "/sifra_help": "Show admin commands",
 }
 
@@ -270,7 +276,39 @@ def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
         send_message(chat_id, f"🧹 Cleared <b>{count}</b> conversations.")
         return {"success": True, "reply": f"cleared {count} conversations"}
 
+    if cmd == "/sifra_learn_status":
+        return _send_learn_status(chat_id)
+
     return None
+
+
+def _send_learn_status(chat_id: int | str) -> dict:
+    """Send observation learning stats via Telegram."""
+    stats = get_observation_stats()
+    from supabase_client import get_all_learnings
+    learnings = get_all_learnings()
+
+    msg = (
+        f"🧠 <b>Observation Learning Status</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"<b>Source:</b> @{RUMIK_BOT_USERNAME}\n"
+        f"<b>Total Observations:</b> {stats['total_observations']}\n"
+        f"<b>Analyzed:</b> {stats['analyzed']}\n"
+        f"<b>Pending Analysis:</b> {stats['pending']}\n"
+        f"<b>Patterns Learned:</b> {stats['learnings_count']}\n"
+    )
+
+    if learnings:
+        msg += "\n<b>What I've learned:</b>\n"
+        for l in learnings[:8]:
+            cat = l.get('category', '?')
+            pattern = l.get('pattern', '')[:80]
+            conf = l.get('confidence', 0)
+            msg += f"• [{cat}] {pattern} <i>({conf:.0%})</i>\n"
+
+    msg += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    send_message(chat_id, msg)
+    return {"success": True, "reply": "learn status sent"}
 
 
 def _send_diagnostics(chat_id: int | str) -> dict:
@@ -385,15 +423,9 @@ def process_update(update: dict) -> dict:
     """
     Process an incoming Telegram webhook update.
 
-    Pipeline:
-    1. Extract + validate message
-    2. Analyze sentiment (AI — not keywords)
-    3. Build context (time + sentiment + energy → personality mode)
-    4. Check for web search need
-    5. Generate response (brain → quality gate → retry if needed)
-    6. Save everything
-    7. Send reply
-    8. Extract memories (async background)
+    Handles two modes:
+    A) GROUP MODE — If message is from a group and from Rumik's bot, observe silently.
+    B) PRIVATE MODE — Normal Sifra conversation pipeline.
 
     Returns dict with success, reply, error.
     """
@@ -408,7 +440,27 @@ def process_update(update: dict) -> dict:
             return {"success": False, "error": "Empty message text"}
 
         chat_id = message["chat"]["id"]
-        user_id = str(message["from"]["id"])
+        chat_type = message["chat"].get("type", "private")
+        from_user = message.get("from", {})
+        username = from_user.get("username", "").lower()
+        user_id = str(from_user.get("id", ""))
+        is_bot = from_user.get("is_bot", False)
+
+        # =================================================================
+        # GROUP MODE — Observation Learning
+        # =================================================================
+        if chat_type in ("group", "supergroup"):
+            return _handle_group_message(
+                text=text,
+                chat_id=chat_id,
+                username=username,
+                is_bot=is_bot,
+                user_id=user_id,
+            )
+
+        # =================================================================
+        # PRIVATE MODE — Normal Sifra Pipeline
+        # =================================================================
 
         if USER_TELEGRAM_ID and user_id != USER_TELEGRAM_ID:
             logger.warning(f"Unauthorized user: {user_id}")
@@ -420,6 +472,10 @@ def process_update(update: dict) -> dict:
             send_message(chat_id, welcome)
             save_conversation("sifra", welcome, platform="telegram")
             return {"success": True, "reply": welcome}
+
+        # --- /learn command — learn from a forwarded message ---
+        if text.lower().startswith("/learn"):
+            return _handle_learn_command(text, chat_id)
 
         # --- Secret Admin Commands ---
         if text.startswith("/sifra_"):
@@ -525,7 +581,7 @@ def process_update(update: dict) -> dict:
             "energy_level": brain._derive_sifra_energy(context["sentiment"], context["time_label"]),
         })
 
-        # --- Step 12: Memory extraction (async) ---
+        # --- Step 13: Memory extraction (async) ---
         thread = threading.Thread(
             target=_extract_memories_async,
             args=(text, recent_str),
@@ -538,6 +594,65 @@ def process_update(update: dict) -> dict:
     except Exception as e:
         logger.error(f"process_update failed: {e}")
         return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Group Observation — Silent Learning Mode
+# ---------------------------------------------------------------------------
+
+def _handle_group_message(
+    text: str, chat_id: int, username: str, is_bot: bool, user_id: str,
+) -> dict:
+    """
+    Handle a message from a group chat.
+    If it's from Rumik's bot → observe and learn.
+    If it's from a human user → track as context for pairing.
+    Sifra NEVER responds in groups — she only observes.
+    """
+    if is_bot and username == RUMIK_BOT_USERNAME:
+        # This is a Rumik response! Capture it.
+        user_context = _recent_group_user_messages.get(chat_id, "(unknown)")
+        logger.info(f"🔍 Observed Rumik response: {text[:80]}...")
+
+        # Capture in background to not block the webhook
+        threading.Thread(
+            target=observation_engine.capture_exchange,
+            args=(user_context, text, "rumik"),
+            daemon=True,
+        ).start()
+
+        return {"success": True, "reply": "(observed rumik)"}
+
+    elif not is_bot:
+        # Human message — track as context for next bot response
+        _recent_group_user_messages[chat_id] = text
+        logger.debug(f"Tracked group user message for context: {text[:60]}")
+        return {"success": True, "reply": "(tracked context)"}
+
+    return {"success": True, "reply": "(ignored group message)"}
+
+
+# ---------------------------------------------------------------------------
+# /learn Command — Manual Forwarded Message Learning
+# ---------------------------------------------------------------------------
+
+def _handle_learn_command(text: str, chat_id: int | str) -> dict:
+    """
+    Handle /learn command — user forwards a message from another bot.
+    Format: /learn <message text>
+    """
+    content = text[len("/learn"):].strip()
+    if not content:
+        send_message(chat_id, "forward a message and add /learn before it. example:\n/learn arre yr kya scene hai")
+        return {"success": True, "reply": "learn usage"}
+
+    # Analyze in background
+    def _learn_async():
+        result = observation_engine.learn_from_single(content)
+        send_message(chat_id, result)
+
+    threading.Thread(target=_learn_async, daemon=True).start()
+    return {"success": True, "reply": "learning..."}
 
 
 def _format_recent(messages: list[dict]) -> str:
