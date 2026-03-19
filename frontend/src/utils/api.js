@@ -59,3 +59,18 @@ export async function deleteMemory(memoryId) {
 export async function fetchHealth() {
   return apiFetch('/health');
 }
+
+// --- Reset / Factory Wipe ---
+
+export async function resetMemories() {
+  return apiFetch('/api/reset/memories', { method: 'POST' });
+}
+
+export async function resetConversations() {
+  return apiFetch('/api/reset/conversations', { method: 'POST' });
+}
+
+export async function factoryReset() {
+  return apiFetch('/api/reset/full', { method: 'POST' });
+}
+

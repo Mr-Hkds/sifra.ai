@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import NeuralHeader from './components/NeuralHeader';
 import MemoryCore from './components/MemoryCore';
 import LiveFeed from './components/LiveFeed';
 import SignalAnalysis from './components/SignalAnalysis';
+import ControlPanel from './components/ControlPanel';
 import StatusBar from './components/StatusBar';
 import { useSifraState } from './hooks/useSifraState';
 import { useMemories } from './hooks/useMemories';
@@ -13,9 +14,16 @@ import { useConversations } from './hooks/useConversations';
  * Three zones: Neural Header → Three-column grid → Status Bar
  */
 export default function App() {
-  const { state, loading: stateLoading } = useSifraState();
-  const { memories, addMemory, removeMemory, loading: memLoading } = useMemories();
-  const { conversations, loading: convLoading } = useConversations();
+  const { state, loading: stateLoading, refresh: refreshState } = useSifraState();
+  const { memories, addMemory, removeMemory, loading: memLoading, refresh: refreshMemories } = useMemories();
+  const { conversations, loading: convLoading, refresh: refreshConversations } = useConversations();
+
+  // Refresh all data after a reset
+  const handleResetComplete = useCallback(() => {
+    refreshState();
+    refreshMemories();
+    refreshConversations();
+  }, [refreshState, refreshMemories, refreshConversations]);
 
   // Show minimal loading state
   if (stateLoading && memLoading && convLoading) {
@@ -52,9 +60,14 @@ export default function App() {
           <LiveFeed conversations={conversations} />
         </div>
 
-        {/* Right — Signal Analysis */}
-        <div className="overflow-hidden flex flex-col bg-[var(--color-bg-card)] rounded-xl border border-[var(--color-border-subtle)]">
-          <SignalAnalysis state={state} />
+        {/* Right — Signal Analysis + Controls */}
+        <div className="overflow-hidden flex flex-col gap-4">
+          <div className="flex-1 flex flex-col bg-[var(--color-bg-card)] rounded-xl border border-[var(--color-border-subtle)]">
+            <SignalAnalysis state={state} />
+          </div>
+          <div className="bg-[var(--color-bg-card)] rounded-xl border border-[var(--color-border-subtle)]">
+            <ControlPanel onResetComplete={handleResetComplete} />
+          </div>
         </div>
       </main>
 
@@ -67,3 +80,4 @@ export default function App() {
     </div>
   );
 }
+
