@@ -23,6 +23,7 @@ import random
 import logging
 import json
 import time
+from typing import Any, TypedDict
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -389,6 +390,31 @@ Example: {{"engagement": 7, "personality": 8, "naturalness": 6, "depth": 5, "con
 # Core Training Session — The Multi-Phase Engine
 # ---------------------------------------------------------------------------
 
+class PhaseStats(TypedDict, total=False):
+    messages_sent: int
+    responses_captured: int
+    follow_ups: int
+    threads_completed: int
+    quality_scores: list[float]
+    errors: int
+    avg_quality: float
+
+class TrainingStats(TypedDict, total=False):
+    success: bool
+    error: str
+    total_messages_sent: int
+    total_responses_captured: int
+    total_follow_ups: int
+    total_threads: int
+    total_errors: int
+    phases: dict[str, PhaseStats]
+    quality_scores: list[Any]
+    session_duration: float
+    all_exchanges: list[dict[str, Any]]
+    post_analysis: Any
+    meta_learning: Any
+    avg_overall_quality: float
+
 async def run_training_session(progress_callback=None) -> dict:
     """
     Run a full multi-phase training session.
@@ -409,18 +435,14 @@ async def run_training_session(progress_callback=None) -> dict:
             "error": "TELEGRAM_SESSION not set. Run generate_session.py first.",
         }
 
-    stats = {
-        "success": False,
-        "total_messages_sent": 0,
-        "total_responses_captured": 0,
-        "total_follow_ups": 0,
-        "total_threads": 0,
-        "total_errors": 0,
-        "phases": {},
-        "quality_scores": [],
-        "session_duration": 0,
-        "all_exchanges": [],
-    }
+    total_messages_sent = 0
+    total_responses_captured = 0
+    total_follow_ups = 0
+    total_threads = 0
+    total_errors = 0
+    quality_scores = []
+    all_exchanges = []
+    phases_dict = {}
 
     session_start = time.time()
 
@@ -466,14 +488,12 @@ async def run_training_session(progress_callback=None) -> dict:
             topics = await generate_phase_topics(phase_key)
             random.shuffle(topics)
 
-            phase_stats = {
-                "messages_sent": 0,
-                "responses_captured": 0,
-                "follow_ups": 0,
-                "threads_completed": 0,
-                "quality_scores": [],
-                "errors": 0,
-            }
+            phase_messages_sent = 0
+            phase_responses_captured = 0
+            phase_follow_ups = 0
+            phase_threads_completed = 0
+            phase_errors = 0
+            phase_quality_scores = []
 
             for i, topic in enumerate(topics):
                 # === Thread start ===
@@ -488,8 +508,8 @@ async def run_training_session(progress_callback=None) -> dict:
                         # Send message
                         sent_msg = await client.send_message(rumik, current_msg)
                         my_msg_id = sent_msg.id
-                        phase_stats["messages_sent"] += 1
-                        stats["total_messages_sent"] += 1
+                        phase_messages_sent += 1
+                        total_messages_sent += 1
 
                         turn_label = f"[{i+1}/{len(topics)}]" if turn == 0 else f"  ↳ follow-up {turn}"
                         logger.info(f"  {turn_label} Sent: {current_msg[:60]}")
@@ -512,14 +532,14 @@ async def run_training_session(progress_callback=None) -> dict:
 
                         if rumik_response:
                             thread_conversation.append({"role": "bot", "text": rumik_response})
-                            phase_stats["responses_captured"] += 1
-                            stats["total_responses_captured"] += 1
+                            phase_responses_captured += 1
+                            total_responses_captured += 1
                             logger.info(f"  ✅ Response: {rumik_response[:70]}...")
 
                             # Score response quality
                             quality = await score_response_quality(current_msg, rumik_response)
-                            phase_stats["quality_scores"].append(quality.get("overall", 5.0))
-                            stats["quality_scores"].append(quality)
+                            phase_quality_scores.append(quality.get("overall", 5.0))
+                            quality_scores.append(quality)
 
                             # Feed into observation engine (immediate)
                             observation_engine.capture_exchange(
@@ -528,8 +548,7 @@ async def run_training_session(progress_callback=None) -> dict:
                                 bot_name="rumik",
                             )
 
-                            # Store full exchange
-                            stats["all_exchanges"].append({
+                            all_exchanges.append({
                                 "phase": phase_key,
                                 "user": current_msg,
                                 "bot": rumik_response,
@@ -542,23 +561,23 @@ async def run_training_session(progress_callback=None) -> dict:
                                 current_msg = await generate_follow_up(
                                     thread_conversation, phase_key
                                 )
-                                phase_stats["follow_ups"] += 1
-                                stats["total_follow_ups"] += 1
+                                phase_follow_ups += 1
+                                total_follow_ups += 1
                         else:
                             logger.warning(f"  ⚠️ No response for: {current_msg[:40]}")
                             break  # Don't follow up if no response
 
                     except Exception as e:
                         logger.error(f"  ❌ Error on turn {turn}: {e}")
-                        phase_stats["errors"] += 1
-                        stats["total_errors"] += 1
+                        phase_errors += 1
+                        total_errors += 1
                         await asyncio.sleep(2)
                         break
 
                 # Thread complete
                 if len(thread_conversation) >= 2:
-                    phase_stats["threads_completed"] += 1
-                    stats["total_threads"] += 1
+                    phase_threads_completed += 1
+                    total_threads += 1
 
                 # Cooldown between topics (longer between threads)
                 base_cooldown = TRAINING_COOLDOWN + random.uniform(1, 4)
@@ -568,16 +587,22 @@ async def run_training_session(progress_callback=None) -> dict:
 
             # Store phase stats
             avg_quality = (
-                sum(phase_stats["quality_scores"]) / len(phase_stats["quality_scores"])
-                if phase_stats["quality_scores"]
-                else 0
+                sum(phase_quality_scores) / len(phase_quality_scores)
+                if phase_quality_scores else 0.0
             )
-            phase_stats["avg_quality"] = round(avg_quality, 1)
-            stats["phases"][phase_key] = phase_stats
+            phases_dict[phase_key] = PhaseStats(
+                messages_sent=phase_messages_sent,
+                responses_captured=phase_responses_captured,
+                follow_ups=phase_follow_ups,
+                threads_completed=phase_threads_completed,
+                quality_scores=phase_quality_scores,
+                errors=phase_errors,
+                avg_quality=round(avg_quality, 1)
+            )
 
             logger.info(
-                f"  📊 Phase complete: {phase_stats['responses_captured']}/{phase_stats['messages_sent']} "
-                f"responses, {phase_stats['follow_ups']} follow-ups, avg quality: {avg_quality:.1f}/10"
+                f"  📊 Phase complete: {phase_responses_captured}/{phase_messages_sent} "
+                f"responses, {phase_follow_ups} follow-ups, avg quality: {avg_quality:.1f}/10"
             )
 
             # Brief pause between phases
@@ -586,45 +611,71 @@ async def run_training_session(progress_callback=None) -> dict:
         # ===================================================================
         # Post-Training: Trigger deep analysis
         # ===================================================================
-        stats["success"] = True
-        stats["session_duration"] = round(time.time() - session_start, 1)
+        session_duration = round(time.time() - session_start, 1)
+        post_analysis = None
+        meta_learning = None
 
         # Force batch analysis on everything we just captured
         logger.info("🧠 Triggering post-training deep analysis...")
         try:
-            analysis_result = observation_engine.run_batch_analysis("rumik")
-            stats["post_analysis"] = analysis_result
-
-            # Run meta-learning pass
-            meta_result = observation_engine.run_meta_learning("rumik")
-            stats["meta_learning"] = meta_result
+            post_analysis = observation_engine.run_batch_analysis("rumik")
+            meta_learning = observation_engine.run_meta_learning("rumik")
         except Exception as e:
             logger.error(f"Post-training analysis failed: {e}")
-            stats["post_analysis"] = {"error": str(e)}
+            post_analysis = {"error": str(e)}
 
         # Calculate overall quality
-        all_quality_scores = [
-            q.get("overall", 5) for q in stats["quality_scores"]
-            if isinstance(q, dict)
+        all_quality_nums = [
+            q.get("overall", 5.0) for q in quality_scores if isinstance(q, dict)
         ]
-        stats["avg_overall_quality"] = (
-            round(sum(all_quality_scores) / len(all_quality_scores), 1)
-            if all_quality_scores
-            else 0
+        avg_overall_quality = (
+            round(sum(all_quality_nums) / len(all_quality_nums), 1)
+            if all_quality_nums else 0.0
+        )
+        
+        stats = TrainingStats(
+            success=True,
+            error="",
+            total_messages_sent=total_messages_sent,
+            total_responses_captured=total_responses_captured,
+            total_follow_ups=total_follow_ups,
+            total_threads=total_threads,
+            total_errors=total_errors,
+            phases=phases_dict,
+            quality_scores=quality_scores,
+            session_duration=session_duration,
+            all_exchanges=all_exchanges,
+            post_analysis=post_analysis,
+            meta_learning=meta_learning,
+            avg_overall_quality=avg_overall_quality
         )
 
         logger.info(f"\n{'='*50}")
         logger.info(f"  🏁 TRAINING SESSION COMPLETE")
-        logger.info(f"  Duration: {stats['session_duration']:.0f}s")
-        logger.info(f"  Messages: {stats['total_messages_sent']} sent, {stats['total_responses_captured']} captured")
-        logger.info(f"  Threads: {stats['total_threads']}, Follow-ups: {stats['total_follow_ups']}")
-        logger.info(f"  Avg Quality: {stats['avg_overall_quality']}/10")
+        logger.info(f"  Duration: {session_duration:.0f}s")
+        logger.info(f"  Messages: {total_messages_sent} sent, {total_responses_captured} captured")
+        logger.info(f"  Threads: {total_threads}, Follow-ups: {total_follow_ups}")
+        logger.info(f"  Avg Quality: {avg_overall_quality}/10")
         logger.info(f"{'='*50}")
 
     except Exception as e:
         logger.error(f"Training session failed: {e}")
-        stats["success"] = False
-        stats["error"] = str(e)
+        stats = TrainingStats(
+            success=False,
+            error=str(e),
+            total_messages_sent=total_messages_sent,
+            total_responses_captured=total_responses_captured,
+            total_follow_ups=total_follow_ups,
+            total_threads=total_threads,
+            total_errors=total_errors,
+            phases=phases_dict,
+            quality_scores=quality_scores,
+            session_duration=round(time.time() - session_start, 1),
+            all_exchanges=all_exchanges,
+            post_analysis=None,
+            meta_learning=None,
+            avg_overall_quality=0.0
+        )
     finally:
         await client.disconnect()
 
