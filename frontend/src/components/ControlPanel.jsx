@@ -2,170 +2,144 @@ import React, { useState, useCallback } from 'react';
 import { resetMemories, resetConversations, factoryReset } from '../utils/api';
 
 /**
- * ControlPanel — Factory reset controls for Sifra.
- * Premium danger-zone panel with confirmation states.
+ * ControlPanel — Compact reset controls for the dashboard sidebar.
+ * Inline confirmation → execute → feedback. No modals.
  */
 export default function ControlPanel({ onResetComplete }) {
-  const [status, setStatus] = useState(null); // { type: 'success'|'error', msg: string }
-  const [confirming, setConfirming] = useState(null); // 'memories' | 'conversations' | 'full'
+  const [status, setStatus] = useState(null);
+  const [confirming, setConfirming] = useState(null);
   const [processing, setProcessing] = useState(false);
 
-  const handleAction = useCallback(async (type) => {
-    if (confirming !== type) {
-      setConfirming(type);
-      setStatus(null);
-      return;
-    }
-
+  const execute = useCallback(async (type) => {
     setProcessing(true);
     setStatus(null);
-
     try {
       let result;
       if (type === 'memories') {
         result = await resetMemories();
-        setStatus({ type: 'success', msg: `Cleared ${result.memories_cleared} memories` });
+        setStatus({ ok: true, msg: `${result.memories_cleared} memories cleared` });
       } else if (type === 'conversations') {
         result = await resetConversations();
-        setStatus({ type: 'success', msg: `Cleared ${result.conversations_cleared} conversations` });
+        setStatus({ ok: true, msg: `${result.conversations_cleared} conversations cleared` });
       } else {
         result = await factoryReset();
-        setStatus({
-          type: 'success',
-          msg: `Factory reset — ${result.memories_cleared} memories, ${result.conversations_cleared} conversations cleared`,
-        });
+        setStatus({ ok: true, msg: `Reset done — ${result.memories_cleared} mem, ${result.conversations_cleared} conv` });
       }
       if (onResetComplete) onResetComplete();
     } catch (err) {
-      setStatus({ type: 'error', msg: err.message || 'Reset failed' });
+      setStatus({ ok: false, msg: err.message || 'Failed' });
     } finally {
       setProcessing(false);
       setConfirming(null);
     }
-  }, [confirming, onResetComplete]);
+  }, [onResetComplete]);
+
+  const handleClick = useCallback((type) => {
+    if (confirming === type) {
+      execute(type);
+    } else {
+      setConfirming(type);
+      setStatus(null);
+    }
+  }, [confirming, execute]);
 
   const cancel = useCallback(() => {
     setConfirming(null);
     setStatus(null);
   }, []);
 
+  const ACTIONS = [
+    { key: 'memories', label: 'Memories', icon: '◈' },
+    { key: 'conversations', label: 'Chat Log', icon: '◇' },
+    { key: 'full', label: 'Full Reset', icon: '⚠', danger: true },
+  ];
+
   return (
-    <div className="p-5 flex flex-col gap-4">
+    <div className="p-4">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-1">
-        <div className="h-px w-6 bg-red-500/60" />
-        <span className="text-[10px] font-semibold tracking-[0.15em] text-[var(--color-text-muted)] uppercase">
-          System Controls
+      <div className="flex items-center gap-2 mb-3">
+        <div className="h-px w-4 bg-red-500/50" />
+        <span className="text-[9px] font-bold tracking-[0.2em] text-[var(--color-text-muted)] uppercase">
+          Reset
         </span>
       </div>
 
-      {/* Buttons */}
-      <div className="flex flex-col gap-2">
-        <ResetButton
-          label="Clear Memories"
-          description="Wipe all stored memories"
-          isConfirming={confirming === 'memories'}
-          isProcessing={processing && confirming === 'memories'}
-          onClick={() => handleAction('memories')}
-          onCancel={cancel}
-        />
-        <ResetButton
-          label="Clear Chat History"
-          description="Wipe all conversation logs"
-          isConfirming={confirming === 'conversations'}
-          isProcessing={processing && confirming === 'conversations'}
-          onClick={() => handleAction('conversations')}
-          onCancel={cancel}
-        />
-        <ResetButton
-          label="Factory Reset"
-          description="Wipe everything, start fresh"
-          isDanger
-          isConfirming={confirming === 'full'}
-          isProcessing={processing && confirming === 'full'}
-          onClick={() => handleAction('full')}
-          onCancel={cancel}
-        />
+      {/* Buttons Row */}
+      <div className="flex gap-2">
+        {ACTIONS.map(({ key, label, icon, danger }) => {
+          const isConfirming = confirming === key;
+          const isProcessing = processing && confirming === key;
+
+          if (isProcessing) {
+            return (
+              <div
+                key={key}
+                className="flex-1 flex items-center justify-center py-2 rounded-md
+                  border border-[var(--color-border)] bg-[var(--color-bg-primary)]"
+              >
+                <div className="w-3 h-3 border-2 border-[var(--color-accent-green)] border-t-transparent rounded-full animate-spin" />
+              </div>
+            );
+          }
+
+          if (isConfirming) {
+            return (
+              <div
+                key={key}
+                className="flex-1 flex items-center gap-1 animate-fade-in"
+              >
+                <button
+                  onClick={() => execute(key)}
+                  className="flex-1 py-2 rounded-md text-[10px] font-bold tracking-wider
+                    bg-red-950/40 border border-red-700/40 text-red-400
+                    hover:bg-red-900/50 active:scale-95 transition-all cursor-pointer"
+                >
+                  YES
+                </button>
+                <button
+                  onClick={cancel}
+                  className="flex-1 py-2 rounded-md text-[10px] font-bold tracking-wider
+                    border border-[var(--color-border)] text-[var(--color-text-muted)]
+                    hover:text-[var(--color-text-secondary)] active:scale-95 transition-all cursor-pointer"
+                >
+                  NO
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <button
+              key={key}
+              onClick={() => handleClick(key)}
+              className={`
+                flex-1 flex flex-col items-center gap-1 py-2.5 rounded-md
+                border transition-all duration-200 cursor-pointer active:scale-95
+                ${danger
+                  ? 'border-red-900/30 text-red-400/70 hover:border-red-700/50 hover:bg-red-950/20 hover:text-red-400'
+                  : 'border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)] hover:bg-[var(--color-bg-card-hover)] hover:text-[var(--color-text-secondary)]'
+                }
+              `}
+            >
+              <span className="text-sm">{icon}</span>
+              <span className="text-[9px] font-semibold tracking-wider">{label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Status feedback */}
+      {/* Feedback */}
       {status && (
         <div
-          className={`text-[11px] font-mono px-3 py-2 rounded-md border animate-fade-in ${
-            status.type === 'success'
+          className={`mt-2 text-[10px] font-mono px-2 py-1.5 rounded border animate-fade-in ${
+            status.ok
               ? 'bg-emerald-950/30 border-emerald-800/30 text-emerald-400'
               : 'bg-red-950/30 border-red-800/30 text-red-400'
           }`}
         >
-          {status.type === 'success' ? '✓' : '✗'} {status.msg}
+          {status.ok ? '✓' : '✗'} {status.msg}
         </div>
       )}
     </div>
-  );
-}
-
-function ResetButton({ label, description, isDanger, isConfirming, isProcessing, onClick, onCancel }) {
-  if (isProcessing) {
-    return (
-      <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)]">
-        <div className="w-3 h-3 border-2 border-[var(--color-accent-green)] border-t-transparent rounded-full animate-spin" />
-        <span className="text-xs text-[var(--color-text-secondary)]">Processing...</span>
-      </div>
-    );
-  }
-
-  if (isConfirming) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-950/20 border border-red-800/30 animate-fade-in">
-        <span className="text-xs text-red-400 flex-1">
-          {isDanger ? '⚠ This is irreversible. Confirm?' : 'Are you sure?'}
-        </span>
-        <button
-          onClick={onClick}
-          className="text-[10px] font-bold tracking-wider text-red-400 bg-red-950/50 hover:bg-red-900/60
-            px-3 py-1.5 rounded border border-red-700/40 hover:border-red-600
-            active:scale-95 transition-all duration-200 cursor-pointer"
-        >
-          YES
-        </button>
-        <button
-          onClick={onCancel}
-          className="text-[10px] font-bold tracking-wider text-[var(--color-text-muted)]
-            hover:text-[var(--color-text-secondary)] px-3 py-1.5 rounded border border-[var(--color-border)]
-            hover:border-[var(--color-text-muted)]
-            active:scale-95 transition-all duration-200 cursor-pointer"
-        >
-          NO
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        group flex items-center justify-between px-4 py-3 rounded-lg
-        border transition-all duration-200 cursor-pointer active:scale-[0.98]
-        ${isDanger
-          ? 'border-red-900/30 hover:border-red-700/50 hover:bg-red-950/20'
-          : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)] hover:bg-[var(--color-bg-card-hover)]'
-        }
-      `}
-    >
-      <div className="flex flex-col items-start gap-0.5">
-        <span className={`text-xs font-semibold tracking-wide ${isDanger ? 'text-red-400/80' : 'text-[var(--color-text-secondary)]'}`}>
-          {label}
-        </span>
-        <span className="text-[10px] text-[var(--color-text-muted)]">{description}</span>
-      </div>
-      <span
-        className={`text-[10px] opacity-0 group-hover:opacity-100 transition-opacity ${
-          isDanger ? 'text-red-500/60' : 'text-[var(--color-text-muted)]'
-        }`}
-      >
-        →
-      </span>
-    </button>
   );
 }

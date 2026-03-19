@@ -79,6 +79,154 @@ def _handle_core_rules(text: str, chat_id: int | str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Secret Admin Commands — diagnostic & control via Telegram
+# ---------------------------------------------------------------------------
+
+ADMIN_COMMANDS = {
+    "/sifra_diag": "System diagnostics",
+    "/sifra_reset": "Full factory reset",
+    "/sifra_clear_mem": "Clear all memories",
+    "/sifra_clear_conv": "Clear all conversations",
+    "/sifra_help": "Show admin commands",
+}
+
+
+def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
+    """
+    Handle secret admin commands. Returns a result dict if handled, None otherwise.
+    These commands are invisible to Sifra — they don't go through the AI pipeline.
+    """
+    cmd = text.strip().lower().split()[0]
+
+    if cmd == "/sifra_help":
+        lines = ["🔧 <b>SIFRA:MIND Admin Commands</b>\n"]
+        for c, desc in ADMIN_COMMANDS.items():
+            lines.append(f"<code>{c}</code> — {desc}")
+        send_message(chat_id, "\n".join(lines))
+        return {"success": True, "reply": "admin help"}
+
+    if cmd == "/sifra_diag":
+        return _send_diagnostics(chat_id)
+
+    if cmd == "/sifra_reset":
+        from supabase_client import full_reset
+        result = full_reset()
+        msg = (
+            f"♻️ <b>Factory Reset Complete</b>\n\n"
+            f"• Memories cleared: <b>{result['memories_cleared']}</b>\n"
+            f"• Conversations cleared: <b>{result['conversations_cleared']}</b>\n"
+            f"• State: reset to defaults\n\n"
+            f"<i>Sifra is now a blank slate.</i>"
+        )
+        send_message(chat_id, msg)
+        return {"success": True, "reply": "factory reset done"}
+
+    if cmd == "/sifra_clear_mem":
+        from supabase_client import clear_all_memories
+        count = clear_all_memories()
+        send_message(chat_id, f"🧹 Cleared <b>{count}</b> memories.")
+        return {"success": True, "reply": f"cleared {count} memories"}
+
+    if cmd == "/sifra_clear_conv":
+        from supabase_client import clear_all_conversations
+        count = clear_all_conversations()
+        send_message(chat_id, f"🧹 Cleared <b>{count}</b> conversations.")
+        return {"success": True, "reply": f"cleared {count} conversations"}
+
+    return None
+
+
+def _send_diagnostics(chat_id: int | str) -> dict:
+    """Send a full system diagnostics report via Telegram."""
+    import importlib
+    import os
+    from config import (
+        VERSION, BUILD_DATE, GEMINI_API_KEY,
+        GEMINI_CHAT_MODEL, GROQ_CHAT_MODEL, GROQ_FAST_MODEL,
+        CONVERSATION_CONTEXT_LIMIT, MEMORY_RECALL_LIMIT,
+        CHAT_TEMPERATURE,
+    )
+
+    # Module check
+    modules = [
+        "brain", "ai_client", "sentiment", "context_engine",
+        "personality", "memory_engine", "quality_gate",
+        "telegram_handler", "proactive", "web_search", "supabase_client",
+    ]
+    loaded = 0
+    failed = []
+    for mod in modules:
+        try:
+            importlib.import_module(mod)
+            loaded += 1
+        except Exception as e:
+            failed.append(f"{mod}: {str(e)[:40]}")
+
+    # DB check
+    db_status = "❌ error"
+    try:
+        from supabase_client import get_client
+        get_client().table("sifra_state").select("id").limit(1).execute()
+        db_status = "✅ connected"
+    except Exception:
+        pass
+
+    # Memory & conversation counts
+    mem_count = 0
+    conv_count = 0
+    try:
+        from supabase_client import get_all_memories, get_conversations
+        mem_count = len(get_all_memories())
+        conv_count = len(get_conversations(limit=9999))
+    except Exception:
+        pass
+
+    # State
+    try:
+        state = get_sifra_state()
+        mood = state.get("current_mood", "unknown")
+        energy = state.get("energy_level", "?")
+        mode = state.get("personality_mode", "unknown")
+    except Exception:
+        mood = energy = mode = "error"
+
+    # AI provider
+    ai_provider = "Gemini + Groq" if GEMINI_API_KEY else "Groq only"
+    chat_model = GEMINI_CHAT_MODEL if GEMINI_API_KEY else GROQ_CHAT_MODEL
+
+    msg = (
+        f"🔍 <b>SIFRA:MIND Diagnostics</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"<b>Version:</b> v{VERSION} ({BUILD_DATE})\n"
+        f"<b>Architecture:</b> v3 rewrite\n\n"
+        f"<b>AI Provider:</b> {ai_provider}\n"
+        f"<b>Chat Model:</b> {chat_model}\n"
+        f"<b>Fast Model:</b> {GROQ_FAST_MODEL}\n"
+        f"<b>Temperature:</b> {CHAT_TEMPERATURE}\n"
+        f"<b>Context Window:</b> {CONVERSATION_CONTEXT_LIMIT} messages\n"
+        f"<b>Memory Limit:</b> {MEMORY_RECALL_LIMIT} per prompt\n\n"
+        f"<b>Database:</b> {db_status}\n"
+        f"<b>Modules:</b> {loaded}/{len(modules)} loaded\n"
+    )
+
+    if failed:
+        msg += f"<b>Failed:</b> {', '.join(failed)}\n"
+
+    msg += (
+        f"\n<b>Memories:</b> {mem_count} stored\n"
+        f"<b>Conversations:</b> {conv_count} messages\n\n"
+        f"<b>Current Mood:</b> {mood}\n"
+        f"<b>Energy:</b> {energy}/10\n"
+        f"<b>Mode:</b> {mode}\n\n"
+        f"<b>Gemini Key:</b> {'✅ set' if GEMINI_API_KEY else '⚠️ not set'}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    send_message(chat_id, msg)
+    return {"success": True, "reply": "diagnostics sent"}
+
+
+# ---------------------------------------------------------------------------
 # Background Memory Extraction
 # ---------------------------------------------------------------------------
 
@@ -135,6 +283,12 @@ def process_update(update: dict) -> dict:
             send_message(chat_id, welcome)
             save_conversation("sifra", welcome, platform="telegram")
             return {"success": True, "reply": welcome}
+
+        # --- Secret Admin Commands ---
+        if text.startswith("/sifra_"):
+            result = _handle_admin_command(text, chat_id)
+            if result:
+                return result
 
         # --- Core Rules ---
         if _handle_core_rules(text, chat_id):
