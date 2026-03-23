@@ -207,12 +207,18 @@ async def generate_phase_topics(phase: str, count: int | None = None) -> list[st
         )
 
         # Handle both {"messages": [...]} and [...] formats
+        valid_messages = []
         if isinstance(result, dict):
             messages = result.get("messages") or result.get("topics") or result.get("starters") or []
             if isinstance(messages, list):
-                return messages[:actual_count]
-        if isinstance(result, list):
-            return result[:actual_count]
+                valid_messages = messages
+        elif isinstance(result, list):
+            valid_messages = result
+            
+        if valid_messages and len(valid_messages) > 0:
+            return valid_messages[:actual_count]
+            
+        logger.warning(f"AI returned invalid or empty JSON structure for phase '{phase}'. Activating fallback.")
 
     except Exception as e:
         logger.error(f"Phase topic generation failed for {phase}: {e}")
