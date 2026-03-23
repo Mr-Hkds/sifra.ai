@@ -198,7 +198,8 @@ async def generate_phase_topics(phase: str, count: int | None = None) -> list[st
     actual_count = count or config["count"]
 
     try:
-        prompt = config["prompt"].format(count=actual_count)
+        template = str(config["prompt"])
+        prompt = template.format(count=actual_count)
         result = ai_client.extract_json(
             system_prompt="Generate conversation messages for chatbot training. Return valid JSON array of strings.",
             user_prompt=prompt,
@@ -489,8 +490,8 @@ async def run_training_session(progress_callback=None) -> dict:
                         # Send message
                         sent_msg = await client.send_message(rumik, current_msg)
                         my_msg_id = sent_msg.id
-                        phase_messages_sent += 1
-                        total_messages_sent += 1
+                        phase_messages_sent = phase_messages_sent + 1
+                        total_messages_sent = total_messages_sent + 1
 
                         turn_label = f"[{i+1}/{len(topics)}]" if turn == 0 else f"  ↳ follow-up {turn}"
                         logger.info(f"  {turn_label} Sent: {current_msg[:60]}")
@@ -513,8 +514,8 @@ async def run_training_session(progress_callback=None) -> dict:
 
                         if rumik_response:
                             thread_conversation.append({"role": "bot", "text": rumik_response})
-                            phase_responses_captured += 1
-                            total_responses_captured += 1
+                            phase_responses_captured = phase_responses_captured + 1
+                            total_responses_captured = total_responses_captured + 1
                             logger.info(f"  ✅ Response: {rumik_response[:70]}...")
 
                             # Score response quality
@@ -542,28 +543,28 @@ async def run_training_session(progress_callback=None) -> dict:
                                 current_msg = await generate_follow_up(
                                     thread_conversation, phase_key
                                 )
-                                phase_follow_ups += 1
-                                total_follow_ups += 1
+                                phase_follow_ups = phase_follow_ups + 1
+                                total_follow_ups = total_follow_ups + 1
                         else:
                             logger.warning(f"  ⚠️ No response for: {current_msg[:40]}")
                             break  # Don't follow up if no response
 
                     except Exception as e:
                         logger.error(f"  ❌ Error on turn {turn}: {e}")
-                        phase_errors += 1
-                        total_errors += 1
+                        phase_errors = phase_errors + 1
+                        total_errors = total_errors + 1
                         await asyncio.sleep(2)
                         break
 
                 # Thread complete
                 if len(thread_conversation) >= 2:
-                    phase_threads_completed += 1
-                    total_threads += 1
+                    phase_threads_completed = phase_threads_completed + 1
+                    total_threads = total_threads + 1
 
                 # Cooldown between topics (longer between threads)
                 base_cooldown = TRAINING_COOLDOWN + random.uniform(1, 4)
                 if supports_threads:
-                    base_cooldown += random.uniform(1, 3)  # Extra cooldown between threads
+                    base_cooldown = base_cooldown + random.uniform(1, 3)  # Extra cooldown between threads
                 await asyncio.sleep(base_cooldown)
 
             # Store phase stats
@@ -578,7 +579,7 @@ async def run_training_session(progress_callback=None) -> dict:
                 "threads_completed": phase_threads_completed,
                 "quality_scores": phase_quality_scores,
                 "errors": phase_errors,
-                "avg_quality": round(avg_quality, 1)
+                "avg_quality": round(float(avg_quality), 1)
             }
 
             logger.info(

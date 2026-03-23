@@ -247,7 +247,7 @@ def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
         for c, desc in ADMIN_COMMANDS.items():
             lines.append(f"<code>{c}</code> — {desc}")
         send_message(chat_id, "\n".join(lines))
-        return {"success": True, "reply": "admin help"}
+        return {"success": True}
 
     if cmd == "/sifra_diag":
         return _send_diagnostics(chat_id)
@@ -263,19 +263,19 @@ def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
             f"<i>Sifra is now a blank slate.</i>"
         )
         send_message(chat_id, msg)
-        return {"success": True, "reply": "factory reset done"}
+        return {"success": True}
 
     if cmd == "/sifra_clear_mem":
         from supabase_client import clear_all_memories
         count = clear_all_memories()
         send_message(chat_id, f"🧹 Cleared <b>{count}</b> memories.")
-        return {"success": True, "reply": f"cleared {count} memories"}
+        return {"success": True}
 
     if cmd == "/sifra_clear_conv":
         from supabase_client import clear_all_conversations
         count = clear_all_conversations()
         send_message(chat_id, f"🧹 Cleared <b>{count}</b> conversations.")
-        return {"success": True, "reply": f"cleared {count} conversations"}
+        return {"success": True}
 
     if cmd == "/sifra_learn_status":
         return _send_learn_status(chat_id)
@@ -312,7 +312,7 @@ def _start_training(chat_id: int | str) -> dict:
         else:
             send_message(chat_id, f"❌ <b>GitHub Trigger Failed:</b>\n{res.text}")
             
-        return {"success": True, "reply": "github action triggered"}
+        return {"success": True}
 
     # 2. Fallback to Local Sync Listener if no Cloud Token is configured
     from supabase_client import insert_memory
@@ -378,7 +378,7 @@ def _send_learn_status(chat_id: int | str) -> dict:
 
     msg += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
     send_message(chat_id, msg)
-    return {"success": True, "reply": "learn status sent"}
+    return {"success": True}
 
 
 def _send_diagnostics(chat_id: int | str) -> dict:
