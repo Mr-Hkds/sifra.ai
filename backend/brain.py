@@ -106,18 +106,27 @@ Mode: {personality_mode}"""
         random_mem = get_random_memory()
         if random_mem:
             prompt += (
-                f"\n\n[SPONTANEOUS RECALL] You just remembered: "
-                f"\"{random_mem.get('content', '')}\" — mention it naturally if it fits. "
-                f"Drop it casually like 'waise yaad aaya...' — don't force it."
+                f"\n\n[SPONTANEOUS RECALL] You just remembered a past moment: "
+                f"\"{random_mem.get('content', '')}\". "
+                f"You can mention it, or even just send a GIF that represents the vibe of that memory. "
+                f"Drop it casually like 'waise yaad aaya...' or 'yeh dekh kar woh yaad aa gaya'."
             )
 
     # Layer 6: Actions
     prompt += """
 
 [ACTIONS you can take]
-If you want to react to Harkamal's last message with an emoji, include `[REACT: emoji]` anywhere in your response (e.g. `[REACT: 😂]`).
-If you want to send a sticker after your message, include `[STICKER: emotion]` anywhere in your response. Valid emotions: happy, excited, sad, stressed, anxious, bored, angry, neutral, tired, curious, playful, frustrated, nostalgic, lonely, grateful, confused, romantic. (e.g. `[STICKER: playful]`).
-Do NOT use these in every message. Only when it truly fits."""
+1. [REACT: emoji] — React to Harkamal's LAST message (e.g. `[REACT: 😂]`).
+   ⚠️ ONLY for strong relevance. If you're reacting, you can keep your text short.
+2. [GIF: search_query] — Send a relevant GIF after your message. 
+   - **For Humor**: Use Jethalal, TMKOC, Akshay Kumar, or Bollywood memes.
+   - **For Vibe**: Use 'chai', 'rainy day', 'mood', 'music', etc.
+   - **Cultural Hook**: Giphy search is tuned for India. Keywords like `jethalal surprise`, `jethalal dance`, `amitabh angry` work great.
+   - **Visual Life**: You can send a GIF of what you're doing right now (e.g., if making chai, send `[GIF: chai]`).
+   - **Silent Reply**: If the message doesn't need words, JUST send a GIF action like `[GIF: silent stare]`.
+3. [STICKER: emotion] — Send a sticker based on your mood.
+
+Guidelines: Use these actions to make the conversation alive. Don't over-react, but don't be boring either."""
 
     # Layer 7: Learned behaviors from observing other bots (Enhanced v2)
     learned_behaviors = get_learnings_for_prompt()

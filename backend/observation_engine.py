@@ -203,7 +203,7 @@ def learn_from_single(message_text: str, bot_name: str = "rumik") -> str:
         log_observation("(forwarded — no user context)", message_text, bot_name)
 
         # Quick single-message analysis
-        prompt = f"""Analyze this single message from a chatbot called "{bot_name}" and identify
+        prompt = f"""Analyze this single message from a chatbot called "{bot_name}" and identify 
 any notable conversational patterns (style, emoji use, tone, language mix, humor, energy).
 
 Message: "{message_text}"
@@ -300,14 +300,24 @@ def run_batch_analysis(bot_name: str = "rumik") -> dict:
         if not observations:
             return {"patterns_found": 0, "observations_processed": 0}
 
-        # Format exchanges for the AI — group by threads if possible
-        exchanges = []
+        # 1. Group observations by user message to handle split bot responses
+        grouped_exchanges = []
+        last_user_msg = None
+        
         for obs in observations:
             user_msg = obs.get("user_message", "(unknown)")
             bot_resp = obs.get("bot_response", "")
-            exchanges.append(f"USER: {user_msg}\n{bot_name.upper()}: {bot_resp}")
+            
+            # If same user message as previous, append to the same exchange block
+            if user_msg == last_user_msg and grouped_exchanges:
+                grouped_exchanges[-1] += f"\n{bot_name.upper()}: {bot_resp}"
+            else:
+                # Safeguard: If bot_resp starts with "MEM: ", it might be a memory trace - clean it
+                clean_resp = bot_resp.split("MEM:")[0].strip() if "MEM:" in bot_resp else bot_resp
+                grouped_exchanges.append(f"USER: {user_msg}\n{bot_name.upper()}: {clean_resp}")
+                last_user_msg = user_msg
 
-        exchanges_text = "\n---\n".join(exchanges)
+        exchanges_text = "\n---\n".join(grouped_exchanges)
 
         # Run AI analysis with enhanced prompt
         result = ai_client.extract_json(

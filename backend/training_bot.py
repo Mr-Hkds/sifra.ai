@@ -505,12 +505,16 @@ async def run_training_session(progress_callback=None) -> dict:
                         # Get Rumik's NEW responses (only after our message)
                         messages = await client.get_messages(rumik, limit=5, min_id=my_msg_id)
 
-                        rumik_response = None
-                        for msg in messages:
-                            if msg.sender_id == rumik.id and msg.text:
-                                # Make sure this is a NEW response (not from before)
-                                rumik_response = msg.text
-                                break
+                        # Collect ALL new messages from Rumik (in case of split messages)
+                        rumik_responses = [
+                            msg.text for msg in messages 
+                            if msg.sender_id == rumik.id and msg.text
+                        ]
+                        
+                        if rumik_responses:
+                            # Join multiple messages with newlines
+                            rumik_response = "\n".join(rumik_responses)
+                            logger.info(f"Captured full Rumik response ({len(rumik_responses)} msgs)")
 
                         if rumik_response:
                             thread_conversation.append({"role": "bot", "text": rumik_response})

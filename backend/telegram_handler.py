@@ -18,11 +18,12 @@ import brain
 import memory_engine
 import web_search
 import observation_engine
+import giphy_client
 from supabase_client import (
     save_conversation, get_conversations, get_sifra_state, update_sifra_state,
     get_observation_stats,
 )
-from config import TELEGRAM_BOT_TOKEN, USER_TELEGRAM_ID, WEBHOOK_SECRET, RUMIK_BOT_USERNAME
+from config import TELEGRAM_BOT_TOKEN, USER_TELEGRAM_ID, WEBHOOK_SECRET, RUMIK_BOT_USERNAME, GIPHY_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ CORE_RULES_PATTERN = re.compile(
 # Regex to catch AI-controlled actions
 ACTION_REACT_PATTERN = re.compile(r"\[REACT:\s*(.+?)\]", re.IGNORECASE)
 ACTION_STICKER_PATTERN = re.compile(r"\[STICKER:\s*(.+?)\]", re.IGNORECASE)
+ACTION_GIF_PATTERN = re.compile(r"\[GIF:\s*(.+?)\]", re.IGNORECASE)
 
 # Track recent user messages in groups for pairing with bot responses
 _recent_group_user_messages: dict[int, str] = {}  # chat_id → last user message
@@ -186,6 +188,30 @@ def send_sticker_explicit(chat_id: int | str, emotion_label: str) -> bool:
         return False
     except Exception as e:
         logger.error(f"send_sticker_explicit failed: {e}")
+        return False
+
+
+def send_gif_explicit(chat_id: int | str, query: str) -> bool:
+    """Send a GIF explicitly requested by the AI."""
+    try:
+        gif_url = giphy_client.search_gif(query)
+        if not gif_url:
+            logger.warning(f"No GIF found for query: {query}")
+            return False
+
+        resp = requests.post(
+            f"{TELEGRAM_API}/sendAnimation",
+            json={"chat_id": chat_id, "animation": gif_url},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            logger.info(f"Sent GIF for query: {query}")
+            return True
+        else:
+            logger.warning(f"Failed to send GIF: {resp.status_code} - {resp.text[:100]}")
+            return False
+    except Exception as e:
+        logger.error(f"send_gif_explicit failed: {e}")
         return False
 
 
@@ -623,6 +649,12 @@ def process_update(update: dict) -> dict:
         if sticker_match:
             reply = ACTION_STICKER_PATTERN.sub("", reply).strip()
 
+        # Parse GIFs
+        gif_match = ACTION_GIF_PATTERN.search(reply)
+        gif_query = gif_match.group(1).strip() if gif_match else None
+        if gif_match:
+            reply = ACTION_GIF_PATTERN.sub("", reply).strip()
+
         # --- Step 8: Save Sifra's response ---
         save_conversation(
             "sifra", reply,
@@ -644,11 +676,18 @@ def process_update(update: dict) -> dict:
         if reply:
             send_message(chat_id, reply)
 
-        # --- Step 11: Send sticker if AI asked to ---
+        # --- Step 11: Send sticker or GIF if AI asked to ---
         if sticker_mood:
             threading.Thread(
                 target=send_sticker_explicit,
                 args=(chat_id, sticker_mood),
+                daemon=True,
+            ).start()
+
+        if gif_query:
+            threading.Thread(
+                target=send_gif_explicit,
+                args=(chat_id, gif_query),
                 daemon=True,
             ).start()
 
@@ -729,11 +768,27 @@ def _handle_group_message(
     Sifra NEVER responds in groups — she only observes.
     """
     if is_bot and username == RUMIK_BOT_USERNAME:
+        # 1. Self-ignore: Never observe yourself
+        from app import bot
+        try:
+            me = bot.get_me()
+            if username == me.username.lower():
+                return {"success": True, "source": "self_ignore"}
+        except Exception:
+            pass
+
         # This is a Rumik response! Capture it.
         user_context = _recent_group_user_messages.get(chat_id, "(unknown)")
         logger.info(f"🔍 Observed Rumik response: {text[:80]}...")
 
-        # Capture in background (this remains background as it's not critical for the response)
+        # 2. Redundancy Guard: If we already captured this exact bot response 
+        # in the last few seconds (multiple observers), skip it.
+        recent_obs = observation_engine.get_unanalyzed_observations(bot_name=username, limit=5)
+        last_responses = [obs["bot_response"] for obs in recent_obs]
+        if text in last_responses:
+            return {"success": True, "source": "redundant_bot_msg"}
+
+        # Capture in background
         threading.Thread(
             target=observation_engine.capture_exchange,
             args=(user_context, text, "rumik"),
