@@ -135,6 +135,27 @@ Return a JSON object: {{"directives": [...]}}"""
 
 
 # ---------------------------------------------------------------------------
+# Direct Feedback Learning Prompt
+# ---------------------------------------------------------------------------
+
+FEEDBACK_LEARNING_PROMPT = """You are an expert AI behavior consultant. 
+The user is giving direct feedback or a correction on a chatbot's previous message.
+The chatbot must learn from this feedback to NEVER repeat the mistake.
+
+Bot's original message: "{bot_message}"
+User's feedback/correction: "{user_feedback}"
+
+Extract a SPECIFIC, ACTIONABLE and STRICT behavioral directive for the bot so it never repeats this mistake and immediately changes its behavior.
+If the feedback is about gender, language, or tone, phrase it as an absolute rule.
+
+Return a JSON object with:
+- category: "meta_directive"
+- pattern: A clear, absolute instruction (e.g., "ALWAYS use feminine pronouns for yourself in Hindi, like 'karti hu' instead of 'karta hu'")
+- examples: The bot's original mistake and the suggested fix.
+"""
+
+
+# ---------------------------------------------------------------------------
 # Observation Capture
 # ---------------------------------------------------------------------------
 
@@ -220,6 +241,46 @@ If nothing notable, return {{"patterns": []}}"""
     except Exception as e:
         logger.error(f"learn_from_single failed: {e}")
         return "couldn't analyze that one, try again?"
+
+
+# ---------------------------------------------------------------------------
+# Direct User Feedback Learning
+# ---------------------------------------------------------------------------
+
+def learn_from_feedback(bot_message: str, user_feedback: str) -> str:
+    """
+    Analyze direct user feedback on a specific bot message and extract a meta-directive.
+    Called when user replies to Sifra using /feedback or /correct.
+    """
+    try:
+        log_observation(user_feedback, bot_message, "user_feedback")
+
+        result = ai_client.extract_json(
+            system_prompt="Extract a strict behavioral rule from user feedback on bot behavior. Return valid JSON.",
+            user_prompt=FEEDBACK_LEARNING_PROMPT.format(
+                bot_message=bot_message,
+                user_feedback=user_feedback,
+            ),
+            temperature=0.2, # Low temp for strict rule extraction
+        )
+
+        if not isinstance(result, dict) or not result.get("pattern"):
+            return "noted the feedback but couldn't extract a clear rule from it 🤔"
+
+        # Force category to meta_directive and high confidence
+        upsert_learning(
+            category="meta_directive",
+            pattern=result["pattern"],
+            examples=result.get("examples", f"Feedback: {user_feedback}"),
+            confidence=0.95, # Direct user feedback gets near max priority
+            source_bot="user_feedback",
+        )
+
+        return f"✅ rule added: {result['pattern']}"
+
+    except Exception as e:
+        logger.error(f"learn_from_feedback failed: {e}")
+        return "failed to process the feedback, try again?"
 
 
 # ---------------------------------------------------------------------------
@@ -380,11 +441,12 @@ def run_meta_learning(bot_name: str = "rumik") -> dict:
 # Prompt Injection v2 — Feed Learnings + Directives to Brain
 # ---------------------------------------------------------------------------
 
-def get_learnings_for_prompt(source_bot: str = "rumik") -> str:
+def get_learnings_for_prompt(source_bot: str | None = None) -> str:
     """
     Format learned patterns into natural language for brain.py injection.
     v2: Now includes meta-directives with priority, and formats patterns
     as actionable instructions rather than abstract observations.
+    Fetches learnings from all sources when source_bot is None.
 
     Returns empty string if no learnings.
     """

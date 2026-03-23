@@ -546,17 +546,13 @@ def upsert_learning(
         return None
 
 
-def get_all_learnings(source_bot: str = "rumik") -> list[dict]:
-    """Get all learned patterns from a source bot."""
+def get_all_learnings(source_bot: str | None = "rumik") -> list[dict]:
+    """Get all learned patterns from a source bot, or all if None."""
     try:
-        result = (
-            get_client()
-            .table("observation_learnings")
-            .select("*")
-            .eq("source_bot", source_bot)
-            .order("confidence", desc=True)
-            .execute()
-        )
+        query = get_client().table("observation_learnings").select("*")
+        if source_bot:
+            query = query.eq("source_bot", source_bot)
+        result = query.order("confidence", desc=True).execute()
         return result.data or []
     except Exception as e:
         logger.error(f"get_all_learnings: {e}")

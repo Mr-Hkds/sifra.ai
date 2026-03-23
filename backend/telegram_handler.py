@@ -551,6 +551,10 @@ def process_update(update: dict) -> dict:
         if text.lower().startswith("/learn"):
             return _handle_learn_command(text, chat_id)
 
+        # --- /feedback or /correct command — learn from direct user feedback ---
+        if text.lower().startswith("/feedback") or text.lower().startswith("/correct"):
+            return _handle_feedback_command(message, text, chat_id)
+
         # --- Secret Admin Commands ---
         if text.startswith("/sifra_"):
             result = _handle_admin_command(text, chat_id)
@@ -770,6 +774,41 @@ def _handle_learn_command(text: str, chat_id: int | str) -> dict:
 
     threading.Thread(target=_learn_async, daemon=True).start()
     return {"success": True, "reply": "learning..."}
+
+
+# ---------------------------------------------------------------------------
+# /feedback or /correct Command — Direct User Modification
+# ---------------------------------------------------------------------------
+
+def _handle_feedback_command(message: dict, text: str, chat_id: int | str) -> dict:
+    """
+    Handle direct user feedback on Sifra's behavior.
+    User MUST reply to Sifra's message with `/feedback <correction>`.
+    """
+    reply_to = message.get("reply_to_message")
+    if not reply_to:
+        send_message(chat_id, "please reply to the specific message you want me to fix, and type /feedback <what I should do differently>")
+        return {"success": False, "error": "not a reply"}
+
+    bot_message = reply_to.get("text", "").strip()
+    if not bot_message:
+        send_message(chat_id, "i didn't catch what i said wrong. reply to a text message.")
+        return {"success": False, "error": "empty replied message"}
+
+    # Extract the actual feedback text
+    parts = text.split(" ", 1)
+    if len(parts) < 2:
+        send_message(chat_id, "what did i do wrong? tell me after the command: /feedback <correction>")
+        return {"success": False, "error": "empty feedback"}
+        
+    user_feedback = parts[1].strip()
+
+    def _feedback_async():
+        result = observation_engine.learn_from_feedback(bot_message, user_feedback)
+        send_message(chat_id, result)
+
+    threading.Thread(target=_feedback_async, daemon=True).start()
+    return {"success": True, "reply": "processing feedback..."}
 
 
 def _format_recent(messages: list[dict]) -> str:
