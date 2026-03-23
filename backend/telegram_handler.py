@@ -709,12 +709,10 @@ def _handle_forwarded_rumik(text: str, chat_id: int | str) -> dict:
     """
     logger.info(f"Auto-detected forwarded Rumik message: {text[:80]}...")
 
-    def _learn_async():
-        result = observation_engine.learn_from_single(text)
-        send_message(chat_id, f"📝 {result}")
-
-    threading.Thread(target=_learn_async, daemon=True).start()
-    return {"success": True, "reply": "auto-learning from forwarded rumik message"}
+    # Process synchronously (Vercel fix)
+    result = observation_engine.learn_from_single(text)
+    send_message(chat_id, f"📝 {result}")
+    return {"success": True, "reply": result}
 
 
 # ---------------------------------------------------------------------------
@@ -735,13 +733,12 @@ def _handle_group_message(
         user_context = _recent_group_user_messages.get(chat_id, "(unknown)")
         logger.info(f"🔍 Observed Rumik response: {text[:80]}...")
 
-        # Capture in background to not block the webhook
+        # Capture in background (this remains background as it's not critical for the response)
         threading.Thread(
             target=observation_engine.capture_exchange,
             args=(user_context, text, "rumik"),
             daemon=True,
         ).start()
-
         return {"success": True, "reply": "(observed rumik)"}
 
     elif not is_bot:
@@ -767,13 +764,10 @@ def _handle_learn_command(text: str, chat_id: int | str) -> dict:
         send_message(chat_id, "forward a message and add /learn before it. example:\n/learn arre yr kya scene hai")
         return {"success": True, "reply": "learn usage"}
 
-    # Analyze in background
-    def _learn_async():
-        result = observation_engine.learn_from_single(content)
-        send_message(chat_id, result)
-
-    threading.Thread(target=_learn_async, daemon=True).start()
-    return {"success": True, "reply": "learning..."}
+    # Process synchronously (threading fails on Vercel)
+    result = observation_engine.learn_from_single(content)
+    send_message(chat_id, result)
+    return {"success": True, "reply": result}
 
 
 # ---------------------------------------------------------------------------
@@ -788,27 +782,31 @@ def _handle_feedback_command(message: dict, text: str, chat_id: int | str) -> di
     reply_to = message.get("reply_to_message")
     if not reply_to:
         send_message(chat_id, "please reply to the specific message you want me to fix, and type /feedback <what I should do differently>")
-        return {"success": False, "error": "not a reply"}
+        return {"success": False, "error": "no reply_to"}
 
+    # Extract original bot message and user feedback
     bot_message = reply_to.get("text", "").strip()
-    if not bot_message:
-        send_message(chat_id, "i didn't catch what i said wrong. reply to a text message.")
-        return {"success": False, "error": "empty replied message"}
+    user_feedback = text.split(" ", 1)[1].strip() if " " in text else ""
 
-    # Extract the actual feedback text
-    parts = text.split(" ", 1)
-    if len(parts) < 2:
+    if not user_feedback:
         send_message(chat_id, "what did i do wrong? tell me after the command: /feedback <correction>")
         return {"success": False, "error": "empty feedback"}
-        
-    user_feedback = parts[1].strip()
 
-    def _feedback_async():
-        result = observation_engine.learn_from_feedback(bot_message, user_feedback)
+    # Immediate acknowledgment in Sifra's tone
+    send_message(chat_id, "Acha ek sec, let me check that... 🤔")
+
+    # Process synchronously (threading fails on Vercel)
+    result = observation_engine.learn_from_feedback(bot_message, user_feedback)
+
+    # Resulting confirmation in Sifra's tone
+    if result.startswith("✅"):
+        rule = result.replace("✅ rule added: ", "").strip()
+        confirmation = f"Acha sorry yr, ab se strictly dhyan rakhungi:\n\n→ {rule} 🫡"
+        send_message(chat_id, confirmation)
+    else:
         send_message(chat_id, result)
 
-    threading.Thread(target=_feedback_async, daemon=True).start()
-    return {"success": True, "reply": "processing feedback..."}
+    return {"success": True, "reply": result}
 
 
 def _format_recent(messages: list[dict]) -> str:

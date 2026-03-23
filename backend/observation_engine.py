@@ -140,18 +140,19 @@ Return a JSON object: {{"directives": [...]}}"""
 
 FEEDBACK_LEARNING_PROMPT = """You are an expert AI behavior consultant. 
 The user is giving direct feedback or a correction on a chatbot's previous message.
-The chatbot must learn from this feedback to NEVER repeat the mistake.
+The chatbot MUST learn from this feedback to NEVER repeat the mistake and ALWAYS follow the new rule.
 
 Bot's original message: "{bot_message}"
 User's feedback/correction: "{user_feedback}"
 
-Extract a SPECIFIC, ACTIONABLE and STRICT behavioral directive for the bot so it never repeats this mistake and immediately changes its behavior.
-If the feedback is about gender, language, or tone, phrase it as an absolute rule.
+Extract a SPECIFIC, ABSOLUTE, and STRICT behavioral directive for the bot. 
+Phrase it as a direct command that can be injected into a system prompt.
+If the feedback is about gender (e.g., using male vs female verbs in Hindi), the rule must be absolute and persona-defining.
 
 Return a JSON object with:
 - category: "meta_directive"
-- pattern: A clear, absolute instruction (e.g., "ALWAYS use feminine pronouns for yourself in Hindi, like 'karti hu' instead of 'karta hu'")
-- examples: The bot's original mistake and the suggested fix.
+- pattern: A clear, absolute instruction (e.g., "ALWAYS use feminine pronouns and verb endings for yourself in Hindi, like 'badi fan hoon' instead of 'bada fan hun'")
+- examples: The bot's original mistake vs. the corrected version.
 """
 
 
