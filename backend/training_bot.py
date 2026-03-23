@@ -490,8 +490,8 @@ async def run_training_session(progress_callback=None) -> dict:
                         # Send message
                         sent_msg = await client.send_message(rumik, current_msg)
                         my_msg_id = sent_msg.id
-                        phase_messages_sent = phase_messages_sent + 1
-                        total_messages_sent = total_messages_sent + 1
+                        phase_messages_sent = int(phase_messages_sent) + 1  # type: ignore
+                        total_messages_sent = int(total_messages_sent) + 1  # type: ignore
 
                         turn_label = f"[{i+1}/{len(topics)}]" if turn == 0 else f"  ↳ follow-up {turn}"
                         logger.info(f"  {turn_label} Sent: {current_msg[:60]}")
@@ -514,8 +514,8 @@ async def run_training_session(progress_callback=None) -> dict:
 
                         if rumik_response:
                             thread_conversation.append({"role": "bot", "text": rumik_response})
-                            phase_responses_captured = phase_responses_captured + 1
-                            total_responses_captured = total_responses_captured + 1
+                            phase_responses_captured = int(phase_responses_captured) + 1  # type: ignore
+                            total_responses_captured = int(total_responses_captured) + 1  # type: ignore
                             logger.info(f"  ✅ Response: {rumik_response[:70]}...")
 
                             # Score response quality
@@ -543,23 +543,23 @@ async def run_training_session(progress_callback=None) -> dict:
                                 current_msg = await generate_follow_up(
                                     thread_conversation, phase_key
                                 )
-                                phase_follow_ups = phase_follow_ups + 1
-                                total_follow_ups = total_follow_ups + 1
+                                phase_follow_ups = int(phase_follow_ups) + 1  # type: ignore
+                                total_follow_ups = int(total_follow_ups) + 1  # type: ignore
                         else:
                             logger.warning(f"  ⚠️ No response for: {current_msg[:40]}")
                             break  # Don't follow up if no response
 
                     except Exception as e:
                         logger.error(f"  ❌ Error on turn {turn}: {e}")
-                        phase_errors = phase_errors + 1
-                        total_errors = total_errors + 1
+                        phase_errors = int(phase_errors) + 1  # type: ignore
+                        total_errors = int(total_errors) + 1  # type: ignore
                         await asyncio.sleep(2)
                         break
 
                 # Thread complete
                 if len(thread_conversation) >= 2:
-                    phase_threads_completed = phase_threads_completed + 1
-                    total_threads = total_threads + 1
+                    phase_threads_completed = int(phase_threads_completed) + 1  # type: ignore
+                    total_threads = int(total_threads) + 1  # type: ignore
 
                 # Cooldown between topics (longer between threads)
                 base_cooldown = TRAINING_COOLDOWN + random.uniform(1, 4)

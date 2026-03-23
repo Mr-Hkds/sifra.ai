@@ -220,12 +220,32 @@ def extract_json(
 ) -> list | dict:
     """
     Extract structured JSON from an AI call. Returns parsed JSON or empty list.
-    Uses Groq 70B for reliable JSON generation.
+    Cascades through Gemini -> Groq 70B -> parses JSON.
     """
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
+    
+    # Try Gemini first for JSON extraction
+    if GEMINI_API_KEY:
+        try:
+            raw = _call_gemini(system_prompt, messages, temperature, max_tokens)
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                clean = raw.strip()
+                if clean.startswith("```json"):
+                    clean = clean[7:]
+                elif clean.startswith("```"):
+                    clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                if clean.endswith("```"):
+                    clean = clean[:-3]
+                return json.loads(clean.strip())
+        except Exception as e:
+            logger.warning(f"Gemini extract_json failed: {e}")
+
+    # Fallback to Groq 70B
     try:
         raw = _call_groq(
             messages, GROQ_HEAVY_MODEL, temperature, max_tokens,
@@ -235,8 +255,10 @@ def extract_json(
     except json.JSONDecodeError:
         # Try cleaning markdown fences
         try:
-            clean = raw
-            if clean.startswith("```"):
+            clean = raw.strip()
+            if clean.startswith("```json"):
+                clean = clean[7:]
+            elif clean.startswith("```"):
                 clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
             if clean.endswith("```"):
                 clean = clean[:-3]

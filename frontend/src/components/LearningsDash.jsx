@@ -120,7 +120,7 @@ export default function LearningsDash() {
                   <th className="px-5 py-3 text-[10px] tracking-widest text-[var(--color-text-muted)] font-medium uppercase">Category</th>
                   <th className="px-5 py-3 text-[10px] tracking-widest text-[var(--color-text-muted)] font-medium uppercase">Pattern / Rule</th>
                   <th className="px-5 py-3 text-[10px] tracking-widest text-[var(--color-text-muted)] font-medium uppercase">Confidence</th>
-                  <th className="px-5 py-3 text-[10px] tracking-widest text-[var(--color-text-muted)] font-medium uppercase">Obs Count</th>
+                  <th className="px-5 py-3 text-[10px] tracking-widest text-[var(--color-text-muted)] font-medium uppercase">Examples</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,8 +156,13 @@ export default function LearningsDash() {
                         <span className="text-xs text-[var(--color-text-muted)]">{(l.confidence * 100).toFixed(0)}%</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-sm text-[var(--color-text-secondary)]">
-                      {l.observation_count}
+                    <td className="px-5 py-3 text-sm text-[var(--color-text-secondary)] relative group">
+                      <span className="line-clamp-2 italic opacity-80">{l.examples || "No explicit examples"}</span>
+                      {l.examples && (
+                        <div className="hidden group-hover:block absolute z-10 right-0 bottom-full mb-2 w-[400px] p-3 bg-[#111] border border-[var(--color-border)] rounded shadow-2xl text-xs leading-relaxed whitespace-pre-wrap">
+                          {l.examples}
+                        </div>
+                      )}
                     </td>
                   </motion.tr>
                 ))}

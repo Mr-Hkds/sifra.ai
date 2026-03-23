@@ -459,4 +459,4 @@ def build_persona_prompt(personality_mode: str = "normal", core_rules: str = "")
     if modifier:
         sections.append(f"\nCURRENT MODE — {personality_mode.upper()}:\n{modifier}")
 
-    return "\n\n---\n\n".join(sections)
+    return "\n\n".join(sections)

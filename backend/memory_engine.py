@@ -21,16 +21,18 @@ logger = logging.getLogger(__name__)
 # EXTRACTION — Pull facts from user messages
 # ---------------------------------------------------------------------------
 
-EXTRACTION_PROMPT = """You extract facts about the USER (Harkamal) from their messages.
+EXTRACTION_PROMPT = """You extract facts EXCLUSIVELY about the USER (Harkamal) and EXCLUSIVELY from the provided "USER MESSAGE" section.
 
-RULES:
-- ONLY extract info about the USER. Ignore anything Sifra (the AI) said.
-- Focus on: life facts, feelings, plans, preferences, habits, opinions, communication style.
-- Do NOT extract trivial filler ("ok", "haha", "hmm").
-- Write memories as facts about him: "He stays up till 3am coding", "He's stressed about exams".
+CRITICAL RULES:
+1. ONLY analyze the exact text under "USER MESSAGE".
+2. The "RECENT CONTEXT" is ONLY provided to help you understand what the USER MESSAGE is referring to.
+3. NEVER, UNDER ANY CIRCUMSTANCES, extract facts, events, or preferences from Sifra's messages in the context. Ignore what Sifra likes or does.
+4. Focus on the USER's: life facts, feelings, plans, preferences, habits, opinions, communication style.
+5. Do NOT extract trivial filler ("ok", "haha", "hmm").
+6. Write memories as facts about him. For habits, preferences, and events, you MUST include an exact quote as a reference. Example: "He stays up till 3am coding. (Quote: 'main toh 3 baje tak code kar raha tha')"
 
 Return a JSON object with a "memories" key containing an array. Each item:
-- "content": string (the memory, as a fact about the user)
+- "content": string (the memory fact. MUST include the exact Quote from the message at the end)
 - "category": one of "core", "emotional", "habit", "preference", "event"
   - core = identity (name, age, job, location, relationships)
   - emotional = feelings, emotional events, moods
@@ -39,13 +41,13 @@ Return a JSON object with a "memories" key containing an array. Each item:
   - event = one-time events, plans, news
 - "importance": integer 1-10
 
-If nothing worth remembering, return: {{"memories": []}}
+If there is nothing worth remembering specifically from the USER MESSAGE, return: {{"memories": []}}
 
-USER MESSAGE:
-{message}
+RECENT CONTEXT (For reference ONLY. DO NOT extract facts about Sifra!):
+{context}
 
-RECENT CONTEXT (reference only — don't extract from Sifra's replies):
-{context}"""
+USER MESSAGE (Extract facts ONLY from this!):
+{message}"""
 
 
 def extract_memories(user_message: str, recent_context: str = "") -> list[dict]:
