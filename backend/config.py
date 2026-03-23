@@ -24,6 +24,8 @@ GIPHY_API_KEY = os.environ.get("GIPHY_API_KEY", "GlVGYHkr3WSBnllca54iNt0yFbjz7L6
 TIMEZONE_OFFSET = float(os.environ.get("TIMEZONE_OFFSET", 5.5))  # IST
 USER_LOCATION = os.environ.get("USER_LOCATION", "Delhi, India")
 
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+
 # ---------------------------------------------------------------------------
 # Model Configuration — Cascading Strategy
 # ---------------------------------------------------------------------------

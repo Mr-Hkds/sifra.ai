@@ -287,7 +287,34 @@ def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
 
 
 def _start_training(chat_id: int | str) -> dict:
-    """Trigger an auto-training session seamlessly on the local laptop via a Supabase flag."""
+    """Trigger an auto-training session seamlessly on GitHub Actions or local laptop."""
+    import config
+    import requests
+    
+    # 1. Check if GitHub Token is available to trigger Cloud Actions
+    github_token = getattr(config, "GITHUB_TOKEN", None)
+    if github_token:
+        url = "https://api.github.com/repos/Mr-Hkds/sifra.ai/actions/workflows/auto_train.yml/dispatches"
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {github_token}",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }
+        res = requests.post(url, headers=headers, json={"ref": "main"})
+        
+        if res.status_code == 204:
+            send_message(
+                chat_id,
+                f"🚀 <b>Cloud Training Triggered!</b>\n\n"
+                f"GitHub Actions has received the command and is spinning up a heavy compute server.\n"
+                f"The exact process is entirely automated. I will send you a full summary report the exact moment it completes in ~8-12 mins!"
+            )
+        else:
+            send_message(chat_id, f"❌ <b>GitHub Trigger Failed:</b>\n{res.text}")
+            
+        return {"success": True, "reply": "github action triggered"}
+
+    # 2. Fallback to Local Sync Listener if no Cloud Token is configured
     from supabase_client import insert_memory
     
     # Drop a system core memory that acts as a signal for the local listener
