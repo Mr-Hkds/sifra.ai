@@ -710,6 +710,42 @@ if __name__ == "__main__":
         print()
         for phase, pstats in result.get("phases", {}).items():
             print(f"  {PHASE_CONFIG[phase]['name']}: {pstats['responses_captured']}/{pstats['messages_sent']} | quality: {pstats.get('avg_quality', 0)}/10")
+            
+        # --- GitHub Action / Direct CLI Notification ---
+        import config
+        user_id = getattr(config, "USER_TELEGRAM_ID", None)
+        
+        if user_id:
+            try:
+                from telegram_handler import send_message
+                duration = result.get('session_duration', 0)
+                mins = int(duration // 60)
+                secs = int(duration % 60)
+                
+                msg = (
+                    f"🤖 <b>GitHub Actions: Scheduled Training Complete!</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"⏱ Duration: <b>{mins}m {secs}s</b>\n"
+                    f"📤 Messages Sent: <b>{result.get('total_messages_sent', 0)}</b>\n"
+                    f"📥 Responses Captured: <b>{result.get('total_responses_captured', 0)}</b>\n"
+                    f"🔁 Follow-ups: <b>{result.get('total_follow_ups', 0)}</b>\n"
+                    f"🧵 Threads: <b>{result.get('total_threads', 0)}</b>\n"
+                    f"⭐ Avg Quality: <b>{result.get('avg_overall_quality', 0)}/10</b>\n"
+                )
+                
+                post = result.get("post_analysis", {})
+                if post and not post.get("error"):
+                    msg += f"\n🧠 <b>Deep Analysis:</b> {post.get('patterns_found', 0)} patterns extracted"
+                    
+                meta = result.get("meta_learning", {})
+                if meta and meta.get("directives_generated", 0) > 0:
+                    msg += f"\n🎯 <b>Meta-Learning:</b> {meta.get('directives_generated', 0)} directives generated"
+                
+                send_message(user_id, msg)
+                print("Successfully sent Telegram notification to user.")
+            except Exception as e:
+                print(f"Failed to send Telegram notification: {e}")
+                
     else:
         print(f"  FAILED: {result.get('error', 'Unknown')}")
 
