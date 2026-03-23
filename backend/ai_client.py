@@ -9,8 +9,8 @@ import logging
 from typing import Any
 
 from config import (
-    GROQ_API_KEY, GEMINI_API_KEY,
-    GEMINI_CHAT_MODEL, GROQ_CHAT_MODEL, GROQ_FAST_MODEL, GROQ_HEAVY_MODEL,
+    GROQ_API_KEY, GEMINI_API_KEY, SARVAM_API_KEY,
+    GEMINI_CHAT_MODEL, GROQ_CHAT_MODEL, GROQ_FAST_MODEL, GROQ_HEAVY_MODEL, SARVAM_CHAT_MODEL,
     CHAT_TEMPERATURE, CHAT_MAX_TOKENS,
     FAST_TEMPERATURE, FAST_MAX_TOKENS,
     HEAVY_TEMPERATURE, HEAVY_MAX_TOKENS,
@@ -100,6 +100,31 @@ def _call_gemini(
     return response.text.strip()
 
 
+def _call_sarvam(
+    messages: list[dict],
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    """Make a Sarvam AI API call. Returns the text response."""
+    import requests
+    url = "https://api.sarvam.ai/v1/chat/completions"
+    headers = {
+        "api-subscription-key": SARVAM_API_KEY,
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": SARVAM_CHAT_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens
+    }
+    
+    response = requests.post(url, headers=headers, json=data, timeout=30)
+    response.raise_for_status()
+    result = response.json()
+    return result["choices"][0]["message"]["content"].strip()
+
+
 # ---------------------------------------------------------------------------
 # Public API — The Three Tiers
 # ---------------------------------------------------------------------------
@@ -123,7 +148,16 @@ def chat(
         Conversation history as [{"role": "user"/"assistant", "content": "..."}].
         Last message is the one being responded to.
     """
-    # Try Gemini first (best quality, free)
+    all_messages = [{"role": "system", "content": system_prompt}] + messages
+
+    # Try Sarvam first (Best for Hinglish)
+    if SARVAM_API_KEY:
+        try:
+            return _call_sarvam(all_messages, temperature, max_tokens)
+        except Exception as e:
+            logger.warning(f"Sarvam chat failed, falling back: {e}")
+
+    # Try Gemini next (best quality, free)
     if GEMINI_API_KEY:
         try:
             return _call_gemini(system_prompt, messages, temperature, max_tokens)

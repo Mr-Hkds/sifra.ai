@@ -17,6 +17,7 @@ WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 USER_TELEGRAM_ID = os.environ.get("USER_TELEGRAM_ID", "")
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "")
 GIPHY_API_KEY = os.environ.get("GIPHY_API_KEY", "GlVGYHkr3WSBnllca54iNt0yFbjz7L65")
+SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
 
 # ---------------------------------------------------------------------------
 # Timezone & Location
@@ -37,6 +38,8 @@ GEMINI_CHAT_MODEL = "gemini-2.0-flash"
 GROQ_CHAT_MODEL = "llama-3.3-70b-versatile"       # Primary Groq chat
 GROQ_FAST_MODEL = "llama-3.1-8b-instant"           # Fast classification tasks
 GROQ_HEAVY_MODEL = "llama-3.3-70b-versatile"       # Memory extraction, proactive
+
+SARVAM_CHAT_MODEL = "sarvam-105b"                   # Primary Hinglish model
 
 # ---------------------------------------------------------------------------
 # Generation Parameters
