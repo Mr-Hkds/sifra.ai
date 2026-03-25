@@ -26,24 +26,24 @@ logger = logging.getLogger(__name__)
 # EXTRACTION — Pull facts from user messages
 # ---------------------------------------------------------------------------
 
-EXTRACTION_PROMPT = """You extract facts EXCLUSIVELY about the USER (Harkamal) and EXCLUSIVELY from the provided "USER MESSAGE" section.
+EXTRACTION_PROMPT = """You are a highly selective memory extraction system. You extract LONG-TERM, MEANINGFUL facts about the USER (Harkamal) from the provided "USER MESSAGE".
 
 CRITICAL RULES:
-1. ONLY analyze the exact text under "USER MESSAGE".
-2. The "RECENT CONTEXT" is ONLY provided to help you understand what the USER MESSAGE is referring to.
-3. NEVER, UNDER ANY CIRCUMSTANCES, extract facts, events, or preferences from Sifra's messages in the context. Ignore what Sifra likes or does.
-4. Focus on the USER's: life facts, feelings, plans, preferences, habits, opinions, communication style.
-5. Do NOT extract trivial filler ("ok", "haha", "hmm").
-6. Write memories as facts about him. For habits, preferences, and events, you MUST include an exact quote as a reference. Example: "He stays up till 3am coding. (Quote: 'main toh 3 baje tak code kar raha tha')"
+1. ONLY analyze the exact text under "USER MESSAGE". The context is just for understanding.
+2. EXTREME SELECTIVITY: Do NOT extract random conversational events (e.g., "He asked for a joke", "He used informal language", "He wants a GIF"). These are USELESS.
+3. ONLY extract concrete, long-term facts: real-life events, persistent preferences (e.g., "His favorite character is Jethalal"), relationships, career details, or strong personal opinions.
+4. If the message is just chatting, asking a question, or reacting, return {"memories": []}. It is better to extract NOTHING than to extract garbage.
+5. NEVER extract facts about Sifra or the AI's behavior.
+6. REFERENCE REQUIREMENT: Every single memory MUST end with at least 1-2 exact quote references from the message to prove it's a real fact. Example: "He stays up till 3am coding. (Quote: 'main toh 3 baje tak code kar raha tha')"
 
 Return a JSON object with a "memories" key containing an array. Each item:
-- "content": string (the memory fact. MUST include the exact Quote from the message at the end)
+- "content": string (the memory fact. MUST include the exact Quote(s) from the message at the end)
 - "category": one of "core", "emotional", "habit", "preference", "event"
   - core = identity (name, age, job, location, relationships)
-  - emotional = feelings, emotional events, moods
-  - habit = patterns, routines, communication style
-  - preference = likes, dislikes, opinions
-  - event = one-time events, plans, news
+  - emotional = deep feelings, persistent moods
+  - habit = real-life patterns, routines (NOT chat habits)
+  - preference = genuine likes, dislikes, opinions
+  - event = significant real-life events, plans, news
 - "importance": integer 1-10
 
 If there is nothing worth remembering specifically from the USER MESSAGE, return: {{"memories": []}}
