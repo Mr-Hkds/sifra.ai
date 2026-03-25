@@ -85,6 +85,14 @@ AI_SLOP_PHRASES = [
     "as an ai", "i'm an ai", "as a language model", "i'm a bot",
     "i cannot", "i'm not able to", "interesting question",
     "great question", "thanks for sharing", "i'd be happy to",
+    # v4.2 additions — more AI giveaways
+    "i don't have feelings", "i can't feel", "i was programmed",
+    "i'm just a", "i'm designed to", "my purpose is",
+    "i'm here for you no matter what", "that's completely valid",
+    "i hear you", "your feelings are valid", "that must be",
+    "i want you to know", "remember that you're",
+    "it's okay to feel", "you're not alone in this",
+    "certainly", "delighted to", "wonderful question",
 ]
 MAX_RESPONSE_LENGTH = 500    # Characters — hard cap
 MIN_RESPONSE_LENGTH = 5     # Too short = something broke
