@@ -79,9 +79,18 @@ def _fallback_keyword_check(message: str) -> bool:
     """Fallback keyword-based check if AI intent detection fails."""
     lower = message.lower()
     triggers = [
+        # English
         "search", "google", "news", "price", "cost", "weather",
-        "who is", "what is", "kaun hai", "kya hai", "latest",
-        "trending", "batao", "tell me about", "how to",
+        "who is", "what is", "latest", "trending", "how to",
+        "tell me about", "recommend", "review", "best",
+        "gif", "gifs", "meme", "video", "song",
+        # Hinglish
+        "kaun hai", "kya hai", "kya hota", "kya hoti",
+        "batao", "bata de", "pata hai", "dikhao", "dikha",
+        "suna", "sunao", "padho", "dekhna", "dekhlo",
+        "kitna", "kitne", "kab", "kaha", "kahan",
+        "konsa", "konsi", "kaisa", "kaisi",
+        "bhejo", "bhej", "de do", "link",
     ]
     return any(trigger in lower for trigger in triggers)
 

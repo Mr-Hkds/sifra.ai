@@ -76,43 +76,65 @@ def send_typing_indicator(chat_id: int | str) -> None:
 
 def send_messages_split(chat_id: int | str, text: str) -> bool:
     """
-    Send a response as multiple messages if it has natural break points.
-    This mimics how real people text — in fragments, not paragraphs.
+    Send a response as multiple messages to mimic real human texting.
+    Real humans don't send walls of text — they fire off short bursts.
     
-    Split rules:
-    - If text has \n breaks, split there
-    - If text is > 100 chars with no breaks, split at sentence boundaries
-    - Send each part with a small typing delay between them
+    Strategy:
+    1. If text has \n breaks, split there first
+    2. Then break any chunk > MAX_CHUNK at sentence boundaries
+    3. Cap total parts at 4 max
+    4. Send each with typing indicator + delay
     """
-    # Check for explicit line breaks first
-    parts = [p.strip() for p in text.split("\n") if p.strip()]
+    MAX_CHUNK = 150  # Max chars per message bubble — keeps it tight
+    MAX_PARTS = 4    # Never send more than 4 bubbles
     
-    if len(parts) == 1 and len(text) > 100:
-        # No line breaks but long — try splitting at sentence boundaries
-        import re as _re
-        sentences = _re.split(r'(?<=[.!?])\s+', text)
-        if len(sentences) > 1:
-            # Group sentences into 2-3 parts max
-            mid = len(sentences) // 2
-            parts = [
-                " ".join(sentences[:mid]),
-                " ".join(sentences[mid:]),
-            ]
+    # Step 1: Split at explicit line breaks
+    raw_parts = [p.strip() for p in text.split("\n") if p.strip()]
     
-    # Cap at 3 parts max
-    if len(parts) > 3:
-        parts = [" ".join(parts[:2]), " ".join(parts[2:])]
+    # Step 2: Further split any chunk that's still too long
+    parts: list[str] = []
+    import re as _re
+    for chunk in raw_parts:
+        if len(chunk) <= MAX_CHUNK:
+            parts.append(chunk)
+        else:
+            # Split at sentence boundaries (. ! ? — with Hinglish support)
+            sentences = _re.split(r'(?<=[.!?।])\s+', chunk)
+            if len(sentences) <= 1:
+                # No sentence boundaries — force split at comma or space
+                sentences = _re.split(r'(?<=[,])\s+', chunk)
+            
+            # Group sentences into chunks under MAX_CHUNK
+            current = ""
+            for s in sentences:
+                if current and len(current) + len(s) + 1 > MAX_CHUNK:
+                    parts.append(current.strip())
+                    current = s
+                else:
+                    current = (current + " " + s).strip() if current else s
+            if current.strip():
+                parts.append(current.strip())
     
+    # Step 3: Cap total parts
+    if len(parts) > MAX_PARTS:
+        # Merge excess into last part
+        merged = parts[:MAX_PARTS - 1]
+        merged.append(" ".join(parts[MAX_PARTS - 1:]))
+        parts = merged
+    
+    # Step 4: If only 1 part, just send normally
     if len(parts) <= 1:
         return send_message(chat_id, text)
     
-    # Send each part with typing delay
+    # Step 5: Send each part with realistic typing delays
     for i, part in enumerate(parts):
         if not part:
             continue
         if i > 0:
             send_typing_indicator(chat_id)
-            time.sleep(random.uniform(0.8, 1.8))  # Natural gap between messages
+            # Vary delay by chunk length — shorter chunks = faster send
+            delay = random.uniform(0.6, 1.2) if len(part) < 60 else random.uniform(1.0, 2.0)
+            time.sleep(delay)
         send_message(chat_id, part)
     
     return True

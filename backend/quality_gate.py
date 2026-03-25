@@ -198,7 +198,25 @@ def humanize(response: str) -> str:
     text = re.sub(r"\s{2,}", " ", text).strip()
     text = re.sub(r"\n{3,}", "\n\n", text)
 
-    # 8. If everything got stripped, return original (better than empty)
+    # 8. Hard length cap — no one texts 500-word essays 
+    # If over 400 chars, trim at last complete sentence within limit
+    MAX_LEN = 400
+    if len(text) > MAX_LEN:
+        # Find last sentence boundary within limit
+        trimmed = text[:MAX_LEN]
+        # Try to cut at last sentence end
+        last_period = max(trimmed.rfind('.'), trimmed.rfind('!'), trimmed.rfind('?'), trimmed.rfind('।'))
+        if last_period > MAX_LEN // 2:
+            text = trimmed[:last_period + 1]
+        else:
+            # No good sentence break — cut at last space
+            last_space = trimmed.rfind(' ')
+            if last_space > MAX_LEN // 2:
+                text = trimmed[:last_space] + "..."
+            else:
+                text = trimmed + "..."
+
+    # 9. If everything got stripped, return original (better than empty)
     if len(text.strip()) < 3:
         return response.strip()
 
