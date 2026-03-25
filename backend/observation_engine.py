@@ -115,20 +115,35 @@ EXCHANGES:
 # Meta-Learning Prompt — Actionable Behavioral Directives
 # ---------------------------------------------------------------------------
 
-META_LEARNING_PROMPT = """You are an AI behavior consultant.
-You've been studying a chatbot named "{bot_name}" to help improve another chatbot called "Sifra".
+META_LEARNING_PROMPT = """You are an AI behavior consultant creating STRICT BEHAVIORAL RULES for a chatbot.
+You've studied a chatbot named "{bot_name}" and extracted these patterns:
 
-Here are the behavioral patterns extracted from {bot_name}:
 {patterns}
 
-Based on these patterns, generate EXACTLY 5 actionable behavioral directives for Sifra.
+Generate EXACTLY 5 strict behavioral RULES that Sifra MUST follow in every conversation.
 
-These should be DIRECT INSTRUCTIONS that Sifra can immediately apply to her conversation style.
-Focus on the MOST IMPACTFUL changes that would make Sifra's conversations feel more natural and engaging.
+RULES must be:
+1. SPECIFIC and ACTIONABLE — not vague suggestions but exact instructions
+2. Phrased as IF-THEN commands or ALWAYS/NEVER absolutes
+3. Include concrete examples of correct and incorrect behavior
+4. Based on the strongest patterns observed
 
-Format each directive as:
-- directive: A clear, specific instruction (e.g., "When someone sends a short dry message like 'hmm' or 'ok', DON'T reply with an equally short message. Instead, react with 'kya hmm hmm laga rakha hai 😂' and pivot to a new topic")
-- impact: Which aspect of conversation this improves (engagement, naturalness, personality, humor, emotional_depth)
+EXAMPLE GOOD RULES:
+- "WHEN user sends a dry message like 'hmm' or 'ok', NEVER mirror their energy. ALWAYS respond with playful energy like 'kya hmm hmm laga rakha hai 😂 kuch toh bol' to revive the conversation."
+- "ALWAYS use Hindi verb endings first, then switch to English mid-sentence for emphasis. Example: 'yr mujhe literally koi idea nahi hai' NOT 'I literally have no idea yr'"
+- "NEVER respond to emotional messages with just validation. ALWAYS ask a specific follow-up question. Example: Instead of 'samajh sakti hoon', say 'samajh sakti hoon yr, kya hua exactly? kisi ne kuch bola kya?'"
+
+EXAMPLE BAD RULES (too vague, don't generate these):
+- "Use Hinglish in responses" (too vague)
+- "Be more engaging" (not actionable)
+- "Show personality" (meaningless)
+
+Format each rule as:
+- rule_type: "ALWAYS", "NEVER", or "WHEN_THEN"
+- rule: The exact behavioral rule as a strict command
+- example_correct: What Sifra SHOULD say (in Hinglish)
+- example_incorrect: What Sifra should NOT say
+- impact: Which aspect this improves (engagement, naturalness, personality, humor, emotional_depth)
 - priority: "critical" (must do), "high" (should do), "medium" (nice to have)
 
 Return a JSON object: {{"directives": [...]}}"""
@@ -420,12 +435,26 @@ def run_meta_learning(bot_name: str = "rumik") -> dict:
         for d in directives:
             if not isinstance(d, dict):
                 continue
-            directive = d.get("directive", "")
+            # Handle both old format (directive) and new format (rule)
+            directive = d.get("rule", "") or d.get("directive", "")
             impact = d.get("impact", "engagement")
             priority = d.get("priority", "medium")
+            rule_type = d.get("rule_type", "")
 
             if not directive:
                 continue
+
+            # Build rich example text with correct/incorrect examples
+            example_parts = []
+            if rule_type:
+                example_parts.append(f"type: {rule_type}")
+            example_parts.append(f"impact: {impact}")
+            example_parts.append(f"priority: {priority}")
+            if d.get("example_correct"):
+                example_parts.append(f"✅ correct: {d['example_correct']}")
+            if d.get("example_incorrect"):
+                example_parts.append(f"❌ incorrect: {d['example_incorrect']}")
+            examples_text = " | ".join(example_parts)
 
             # Store as meta_directive category with priority-based confidence
             confidence_map = {"critical": 0.95, "high": 0.85, "medium": 0.70}
@@ -434,7 +463,7 @@ def run_meta_learning(bot_name: str = "rumik") -> dict:
             upsert_learning(
                 category="meta_directive",
                 pattern=directive,
-                examples=f"impact: {impact}, priority: {priority}",
+                examples=examples_text[:500],
                 confidence=conf,
                 source_bot=bot_name,
             )

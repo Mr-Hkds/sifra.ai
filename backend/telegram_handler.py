@@ -502,13 +502,46 @@ def _send_diagnostics(chat_id: int | str) -> dict:
 # ---------------------------------------------------------------------------
 
 def _extract_memories_async(user_message: str, context_str: str) -> None:
-    """Run memory extraction in background thread."""
+    """Run memory extraction + episodic memory detection in background thread."""
     try:
         count = memory_engine.process_extraction(user_message, context_str)
         if count > 0:
             logger.info(f"Extracted {count} memories")
     except Exception as e:
         logger.error(f"Async memory extraction failed: {e}")
+
+    # --- Episodic Memory: detect conversation gaps ---
+    try:
+        from config import MEMORY_EPISODE_GAP_MINUTES
+        from datetime import datetime, timezone, timedelta
+
+        history = get_conversations(limit=30)
+        if len(history) < 6:
+            return  # Need enough history
+
+        # Find the gap: check if there was a break > 30min in the last batch
+        for i in range(1, len(history)):
+            ts_current = history[i].get("timestamp")
+            ts_previous = history[i - 1].get("timestamp")
+            if not ts_current or not ts_previous:
+                continue
+
+            try:
+                t_curr = datetime.fromisoformat(ts_current.replace("Z", "+00:00"))
+                t_prev = datetime.fromisoformat(ts_previous.replace("Z", "+00:00"))
+                gap_minutes = abs((t_curr - t_prev).total_seconds()) / 60.0
+
+                if gap_minutes >= MEMORY_EPISODE_GAP_MINUTES:
+                    # Found a gap — the messages BEFORE the gap form a session
+                    # Only extract if we haven't already (check if recent episode exists)
+                    session_messages = history[i:]  # Messages before the gap
+                    if len(session_messages) >= 4:
+                        memory_engine.extract_episode(session_messages)
+                    break  # Only process the most recent gap
+            except Exception:
+                continue
+    except Exception as e:
+        logger.error(f"Episodic memory detection failed: {e}")
 
 
 # ---------------------------------------------------------------------------

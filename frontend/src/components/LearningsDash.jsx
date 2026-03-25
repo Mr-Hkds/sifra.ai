@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { BrainCircuit, Database, GitMerge, RefreshCw } from 'lucide-react';
+import { BrainCircuit, Database, GitMerge, RefreshCw, Heart, Clock } from 'lucide-react';
 import { fetchLearnings as apiFetchLearnings } from '../utils/api';
 
 export default function LearningsDash() {
-  const [data, setData] = useState({ stats: null, learnings: [] });
+  const [data, setData] = useState({ stats: null, learnings: [], memories: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -15,7 +15,8 @@ export default function LearningsDash() {
       
       setData({
         stats: json.stats,
-        learnings: json.learnings || []
+        learnings: json.learnings || [],
+        memories: json.memories || []
       });
     } catch (err) {
       setError(err.message);
@@ -39,7 +40,7 @@ export default function LearningsDash() {
     );
   }
 
-  const { stats, learnings } = data;
+  const { stats, learnings, memories } = data;
 
   return (
     <div className="flex-1 max-w-[1400px] mx-auto w-full flex flex-col gap-6 py-8 px-6 overflow-y-auto">
@@ -48,10 +49,10 @@ export default function LearningsDash() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold tracking-wide text-[var(--color-text-primary)]">
-            Observation Learning Center
+            Sifra Intelligence Center
           </h2>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Analyzing behavioral patterns from @irarumikbot via Telegram group shadowing.
+            Everything Sifra has learned — memories from conversations + behavioral patterns from training.
           </p>
         </div>
         
@@ -75,6 +76,12 @@ export default function LearningsDash() {
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCard 
+            icon={<Heart size={16} />}
+            label="Active Memories"
+            value={memories.length}
+            color="var(--color-accent-green)"
+          />
+          <StatCard 
             icon={<Database size={16} />}
             label="Total Observations"
             value={stats.total_observations}
@@ -87,31 +94,78 @@ export default function LearningsDash() {
             color="var(--color-accent-purple)"
           />
           <StatCard 
-            icon={<RefreshCw size={16} />}
-            label="Pending Batch"
-            value={stats.pending}
-            color="var(--color-accent-yellow)"
-          />
-          <StatCard 
             icon={<GitMerge size={16} />}
             label="Learned Behaviors"
             value={stats.learnings_count}
-            color="var(--color-accent-green)"
+            color="var(--color-accent-yellow)"
           />
         </div>
       )}
 
-      {/* Learnings Table */}
-      <div className="flex-1 flex flex-col bg-[var(--color-bg-card)] border border-[var(--color-border-subtle)] rounded-xl overflow-hidden mt-4">
-        <div className="px-5 py-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-primary)]/50">
-          <h3 className="text-sm font-semibold tracking-wider text-[var(--color-text-secondary)]">SYNTHESIZED PATTERNS (LAYER 7 PROMPT INJECTION)</h3>
+      {/* Memories Section */}
+      <div className="flex flex-col bg-[var(--color-bg-card)] border border-[var(--color-border-subtle)] rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-primary)]/50 flex items-center gap-2">
+          <Heart size={14} className="text-[var(--color-accent-green)]" />
+          <h3 className="text-sm font-semibold tracking-wider text-[var(--color-text-secondary)]">
+            MEMORIES — WHAT SIFRA KNOWS ABOUT YOU
+          </h3>
+        </div>
+        
+        <div className="p-4">
+          {memories.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-[var(--color-text-muted)]">
+              <Heart size={28} className="opacity-20 mb-3" />
+              <p className="text-sm">No memories stored yet. Talk to Sifra and she'll remember things about you.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {memories.map((m, i) => (
+                <motion.div 
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03 }}
+                  key={m.id || i} 
+                  className="flex items-start gap-3 p-3 rounded-lg bg-[var(--color-bg-primary)]/40 border border-[var(--color-border-subtle)]/50 hover:border-[var(--color-accent-green)]/30 transition-colors"
+                >
+                  <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[var(--color-accent-green)] shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[var(--color-text-primary)] leading-relaxed">{m.content}</p>
+                    <div className="flex items-center gap-3 mt-1.5">
+                      {m.importance && (
+                        <span className="text-[10px] text-[var(--color-text-muted)] tracking-wide">
+                          importance: {typeof m.importance === 'number' ? m.importance.toFixed(1) : m.importance}
+                        </span>
+                      )}
+                      {m.created_at && (
+                        <span className="text-[10px] text-[var(--color-text-muted)] flex items-center gap-1">
+                          <Clock size={9} />
+                          {new Date(m.created_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Observation Learnings Table */}
+      <div className="flex-1 flex flex-col bg-[var(--color-bg-card)] border border-[var(--color-border-subtle)] rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-primary)]/50 flex items-center gap-2">
+          <BrainCircuit size={14} className="text-[var(--color-accent-purple)]" />
+          <h3 className="text-sm font-semibold tracking-wider text-[var(--color-text-secondary)]">
+            BEHAVIORAL PATTERNS — LEARNED FROM TRAINING
+          </h3>
         </div>
         
         <div className="flex-1 overflow-y-auto p-0">
           {learnings.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-[var(--color-text-muted)]">
-              <Database size={32} className="opacity-20 mb-4" />
-              <p>No patterns learned yet. Waiting for enough observations to trigger batch analysis.</p>
+              <BrainCircuit size={28} className="opacity-20 mb-3" />
+              <p className="text-sm">No behavioral patterns extracted yet.</p>
+              <p className="text-xs mt-1 opacity-60">Run a training session to teach Sifra conversational patterns.</p>
             </div>
           ) : (
             <table className="w-full text-left border-collapse">

@@ -61,6 +61,8 @@ MEMORY_RECALL_LIMIT = 10          # Memories to inject into prompt
 MEMORY_DECAY_DAYS = 7             # Days before decay starts
 MEMORY_FORGET_THRESHOLD = 0.2    # Decay score below this = forgotten
 MEMORY_SIMILARITY_THRESHOLD = 0.55  # Word overlap to consider "similar"
+MEMORY_AI_RANKING_CANDIDATES = 30 # Pre-filter candidates for AI ranking
+MEMORY_EPISODE_GAP_MINUTES = 30   # Gap before saving conversation episode
 
 # ---------------------------------------------------------------------------
 # Proactive Messaging
@@ -69,6 +71,9 @@ ABSENCE_THRESHOLD_MINUTES = 240   # 4 hours before "kidhar ho"
 KIDHAR_HO_CHANCE = 0.40           # 40% chance when absent
 GOOD_MORNING_CHANCE = 0.30
 GOOD_NIGHT_CHANCE = 0.30
+PROACTIVE_DAILY_BUDGET = 3        # Max proactive messages per day
+PROACTIVE_COOLDOWN_HOURS = 3      # Min hours between proactive messages
+PROACTIVE_CONVERSATION_BUFFER_MIN = 30  # Don't send if user chatted recently
 
 # ---------------------------------------------------------------------------
 # Quality Gate
@@ -109,9 +114,11 @@ TRAINING_RESPONSE_WAIT = 15          # Seconds to wait for Rumik's reply
 TRAINING_COOLDOWN = 10                # Seconds between messages
 TRAINING_THREAD_DEPTH = 3            # Max follow-ups per conversation thread
 TRAINING_FOLLOW_UP_WAIT = 15          # Seconds to wait before sending follow-up
+TRAINING_MASTERY_THRESHOLD = 8.0   # Skip phase if avg quality above this
+TRAINING_WEAKNESS_THRESHOLD = 5.0  # Focus on phase if avg quality below this
 
 # ---------------------------------------------------------------------------
 # Version
 # ---------------------------------------------------------------------------
-VERSION = "3.4.0"
-BUILD_DATE = "2026-03-19"
+VERSION = "4.0.0"
+BUILD_DATE = "2026-03-25"

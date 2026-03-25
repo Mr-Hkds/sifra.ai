@@ -40,6 +40,8 @@ from config import (
     TRAINING_COOLDOWN,
     TRAINING_THREAD_DEPTH,
     TRAINING_FOLLOW_UP_WAIT,
+    TRAINING_MASTERY_THRESHOLD,
+    TRAINING_WEAKNESS_THRESHOLD,
 )
 
 logger = logging.getLogger(__name__)
@@ -190,16 +192,35 @@ Return as a JSON array of strings.""",
 # ---------------------------------------------------------------------------
 
 async def generate_phase_topics(phase: str, count: int | None = None) -> list[str]:
-    """Generate conversation topics for a specific training phase."""
+    """Generate conversation topics with session memory (dedup against past sessions)."""
     config = PHASE_CONFIG.get(phase)
     if not config:
         return _get_fallback_topics(phase)
 
     actual_count = count or config["count"]
 
+    # Fetch past topics for dedup
+    past_topics = []
+    try:
+        from supabase_client import get_past_training_topics
+        past_topics = get_past_training_topics()
+    except Exception:
+        pass
+
+    dedup_context = ""
+    if past_topics:
+        # Show last 30 topics max to keep prompt manageable
+        recent = past_topics[-30:]
+        dedup_context = (
+            "\n\nCRITICAL: These messages were ALREADY USED in previous training sessions. "
+            "Generate COMPLETELY DIFFERENT ones — different topics, different angles, different emotions.\n"
+            "ALREADY USED (DO NOT REPEAT):\n" +
+            "\n".join(f"- {t}" for t in recent)
+        )
+
     try:
         template = str(config["prompt"])
-        prompt = template.format(count=actual_count)
+        prompt = template.format(count=actual_count) + dedup_context
         result = ai_client.extract_json(
             system_prompt="Generate conversation messages for chatbot training. Return valid JSON array of strings.",
             user_prompt=prompt,
@@ -394,19 +415,136 @@ Example: {{"engagement": 7, "personality": 8, "naturalness": 6, "depth": 5, "con
 
 
 # ---------------------------------------------------------------------------
+# Quality-Driven Probe — Push deeper on weak responses
+# ---------------------------------------------------------------------------
+
+QUALITY_PROBE_PROMPT = """The chatbot gave a WEAK response to this message. Generate a follow-up that PUSHES them to do better.
+
+Original message: "{user_msg}"
+Weak response: "{bot_response}"
+Weak areas: {weak_areas}
+
+Generate a single Hinglish follow-up that:
+- Calls out the generic/bland response (but in a friendly teasing way)
+- Forces a more genuine, engaged, deeper answer
+- Sounds like a close friend who's not satisfied with a half-assed reply
+
+Examples:
+- "bas itna? tujhe sach mein fark padta hai ya aise hi bol rahi hai"
+- "yr generic mat bol, apna batao na properly"
+- "lol woh toh sabko pata hai, kuch naya bata"
+
+Return ONLY the message text."""
+
+
+async def generate_quality_probe(user_msg: str, bot_response: str, quality: dict) -> str:
+    """Generate a targeted follow-up when response quality is low."""
+    weak_areas = []
+    for dim in ["engagement", "personality", "naturalness", "depth", "continuation"]:
+        score = quality.get(dim, 5)
+        try:
+            if float(score) < 4:
+                weak_areas.append(dim)
+        except (ValueError, TypeError):
+            pass
+
+    if not weak_areas:
+        weak_areas = ["overall quality"]
+
+    try:
+        result = ai_client.chat(
+            system_prompt="Generate a single Hinglish follow-up message. Return ONLY the text.",
+            messages=[{"role": "user", "content": QUALITY_PROBE_PROMPT.format(
+                user_msg=user_msg, bot_response=bot_response, weak_areas=", ".join(weak_areas)
+            )}],
+            temperature=0.85,
+            max_tokens=80,
+        )
+        result = result.strip().strip('"').strip("'")
+        if result:
+            return result
+    except Exception as e:
+        logger.error(f"Quality probe generation failed: {e}")
+
+    return "yr sach bata proper, generic mat bol"
+
+
+# ---------------------------------------------------------------------------
+# Adaptive Phase Selection — Focus where it matters
+# ---------------------------------------------------------------------------
+
+def _build_adaptive_phases() -> list[str]:
+    """
+    Build phase order based on past session performance.
+    Weak phases get more time, mastered phases get skipped.
+    """
+    try:
+        from supabase_client import get_training_history
+        history = get_training_history(limit=5)
+    except Exception:
+        history = []
+
+    if not history:
+        return ["warmup", "emotional", "deep_threads", "personality", "edge_cases"]
+
+    # Aggregate quality scores per phase across recent sessions
+    phase_scores: dict[str, list[float]] = {}
+    for session in history:
+        phases = session.get("phases", {})
+        if isinstance(phases, dict):
+            for phase_key, stats in phases.items():
+                if isinstance(stats, dict):
+                    avg_q = stats.get("avg_quality", 5.0)
+                    if phase_key not in phase_scores:
+                        phase_scores[phase_key] = []
+                    phase_scores[phase_key].append(float(avg_q))
+
+    # Determine adaptive order
+    adaptive_order = []
+    all_phases = ["warmup", "emotional", "deep_threads", "personality", "edge_cases"]
+    weak_phases = []
+
+    for phase in all_phases:
+        scores = phase_scores.get(phase, [])
+        if not scores:
+            adaptive_order.append(phase)  # Never tested → include
+            continue
+
+        avg = sum(scores) / len(scores)
+        if avg >= TRAINING_MASTERY_THRESHOLD:
+            logger.info(f"⏭ Skipping mastered phase '{phase}' (avg: {avg:.1f})")
+            continue  # Mastered → skip
+        elif avg < TRAINING_WEAKNESS_THRESHOLD:
+            weak_phases.append(phase)  # Weak → will run twice
+            adaptive_order.append(phase)
+        else:
+            adaptive_order.append(phase)  # Normal → include once
+
+    # Add weak phases again at the end for double practice
+    if weak_phases:
+        logger.info(f"🎯 Weak phases getting extra practice: {weak_phases}")
+        adaptive_order.extend(weak_phases)
+
+    # Always include at least warmup + one other
+    if not adaptive_order:
+        adaptive_order = ["warmup", "emotional"]
+
+    return adaptive_order
+
+
+# ---------------------------------------------------------------------------
 # Core Training Session — The Multi-Phase Engine
 # ---------------------------------------------------------------------------
 
 async def run_training_session(progress_callback=None) -> dict:
     """
-    Run a full multi-phase training session.
-
-    Phases:
-    1. Warm-Up (5 msgs, no threads)
-    2. Emotional Probing (8 msgs, with follow-ups)
-    3. Deep Threads (10 msgs, 2-3 turn threads)
-    4. Personality Testing (7 msgs, with follow-ups)
-    5. Edge Cases (5 msgs, no threads)
+    Run a full multi-phase training session with adaptive curriculum.
+    
+    v3 Upgrades:
+    - Session memory: never repeats topics from past sessions
+    - Adaptive curriculum: skips mastered phases, doubles down on weak ones
+    - Quality-driven probes: pushes harder when bot gives weak responses
+    - Session persistence: saves all data for future sessions to learn from
 
     progress_callback: optional async function(phase_name, message) for live updates.
     Returns detailed stats dict.
@@ -424,6 +562,7 @@ async def run_training_session(progress_callback=None) -> dict:
     total_errors = 0
     quality_scores = []
     all_exchanges = []
+    all_topics_used = []  # Track for session memory
     phases_dict = {}
 
     session_start = time.time()
@@ -446,12 +585,15 @@ async def run_training_session(progress_callback=None) -> dict:
             return {"success": False, "error": f"Bot not found: {e}"}
 
         # ===================================================================
-        # Run each phase sequentially
+        # Adaptive phase selection
         # ===================================================================
-        phase_order = ["warmup", "emotional", "deep_threads", "personality", "edge_cases"]
+        phase_order = _build_adaptive_phases()
+        logger.info(f"📋 Adaptive curriculum: {phase_order}")
 
         for phase_key in phase_order:
-            config = PHASE_CONFIG[phase_key]
+            config = PHASE_CONFIG.get(phase_key)
+            if not config:
+                continue
             phase_name = config["name"]
             supports_threads = config["threads"]
             thread_depth = TRAINING_THREAD_DEPTH if supports_threads else 0
@@ -469,6 +611,7 @@ async def run_training_session(progress_callback=None) -> dict:
             # Generate topics for this phase
             topics = await generate_phase_topics(phase_key)
             random.shuffle(topics)
+            all_topics_used.extend(topics)  # Track for session dedup
 
             phase_messages_sent = 0
             phase_responses_captured = 0
@@ -542,8 +685,21 @@ async def run_training_session(progress_callback=None) -> dict:
                                 "turn": turn,
                             })
 
-                            # Generate follow-up for next turn if applicable
-                            if turn < turns - 1:
+                            # Quality-driven probe: if response was weak, push harder
+                            overall_score = quality.get("overall", 5.0)
+                            try:
+                                overall_score = float(overall_score)
+                            except (ValueError, TypeError):
+                                overall_score = 5.0
+
+                            if overall_score < 4.0 and turn < turns - 1:
+                                # Bad response → targeted probe
+                                current_msg = await generate_quality_probe(
+                                    current_msg, rumik_response, quality
+                                )
+                                logger.info(f"  🎯 Quality probe (score {overall_score:.1f}): {current_msg[:50]}")
+                            elif turn < turns - 1:
+                                # Normal follow-up
                                 current_msg = await generate_follow_up(
                                     thread_conversation, phase_key
                                 )
@@ -618,7 +774,18 @@ async def run_training_session(progress_callback=None) -> dict:
             round(sum(all_quality_nums) / len(all_quality_nums), 1)
             if all_quality_nums else 0.0
         )
-        
+
+        # Identify weak areas for future sessions
+        weak_areas = []
+        for phase_key_check, pstats in phases_dict.items():
+            if isinstance(pstats, dict):
+                avg_q = pstats.get("avg_quality", 5.0)
+                try:
+                    if float(avg_q) < TRAINING_WEAKNESS_THRESHOLD:
+                        weak_areas.append(phase_key_check)
+                except (ValueError, TypeError):
+                    pass
+
         stats = {
             "success": True,
             "error": "",
@@ -633,8 +800,28 @@ async def run_training_session(progress_callback=None) -> dict:
             "all_exchanges": all_exchanges,
             "post_analysis": post_analysis,
             "meta_learning": meta_learning,
-            "avg_overall_quality": avg_overall_quality
+            "avg_overall_quality": avg_overall_quality,
+            "topics_used": all_topics_used,
+            "weak_areas": weak_areas,
+            "phase_order": phase_order,
         }
+
+        # Save session for adaptive future training
+        try:
+            from supabase_client import save_training_session
+            save_training_session({
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "duration": session_duration,
+                "messages_sent": total_messages_sent,
+                "responses_captured": total_responses_captured,
+                "avg_quality": avg_overall_quality,
+                "phases": phases_dict,
+                "topics_used": all_topics_used,
+                "weak_areas": weak_areas,
+                "phase_order": phase_order,
+            })
+        except Exception as e:
+            logger.error(f"Failed to save training session: {e}")
 
         logger.info(f"\n{'='*50}")
         logger.info(f"  🏁 TRAINING SESSION COMPLETE")
@@ -642,6 +829,8 @@ async def run_training_session(progress_callback=None) -> dict:
         logger.info(f"  Messages: {total_messages_sent} sent, {total_responses_captured} captured")
         logger.info(f"  Threads: {total_threads}, Follow-ups: {total_follow_ups}")
         logger.info(f"  Avg Quality: {avg_overall_quality}/10")
+        if weak_areas:
+            logger.info(f"  Weak Areas: {', '.join(weak_areas)}")
         logger.info(f"{'='*50}")
 
     except Exception as e:
@@ -660,7 +849,10 @@ async def run_training_session(progress_callback=None) -> dict:
             "all_exchanges": all_exchanges,
             "post_analysis": None,
             "meta_learning": None,
-            "avg_overall_quality": 0.0
+            "avg_overall_quality": 0.0,
+            "topics_used": all_topics_used,
+            "weak_areas": [],
+            "phase_order": [],
         }
     finally:
         await client.disconnect()
@@ -695,7 +887,7 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
     print("=" * 60)
-    print("  SIFRA:MIND — Training Bot v2")
+    print("  SIFRA:MIND — Training Bot v3 (Adaptive)")
     print(f"  Target: @{RUMIK_BOT_USERNAME}")
     print(f"  Phases: {len(PHASE_CONFIG)}")
     print(f"  Total Messages: ~{sum(p['count'] for p in PHASE_CONFIG.values())}+")

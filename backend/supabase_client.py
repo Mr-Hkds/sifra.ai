@@ -56,7 +56,7 @@ def insert_memory(content: str, category: str, importance: int) -> dict | None:
 
 
 def find_similar_memory(content: str) -> dict | None:
-    """Find a memory with significant word overlap (deduplication)."""
+    """Find a memory with very high word overlap (dedup only, not retrieval)."""
     try:
         result = (
             get_client()
@@ -77,7 +77,8 @@ def find_similar_memory(content: str) -> dict | None:
             if not words_existing:
                 continue
             overlap = len(words_new & words_existing) / max(len(words_new), len(words_existing))
-            if overlap > MEMORY_SIMILARITY_THRESHOLD and overlap > best_score:
+            # High threshold — only for dedup, not retrieval
+            if overlap > 0.75 and overlap > best_score:
                 best_score = overlap
                 best_match = mem
 
@@ -165,6 +166,117 @@ def get_all_active_memories() -> list[dict]:
     except Exception as e:
         logger.error(f"get_all_active_memories: {e}")
         return []
+
+
+def get_memories_for_ranking(limit: int = 30) -> list[dict]:
+    """
+    Pre-filter: return top memories by importance + recency for AI ranking.
+    This avoids sending ALL memories to the AI — only the best candidates.
+    """
+    try:
+        result = (
+            get_client()
+            .table("memories")
+            .select("*")
+            .neq("category", "forget")
+            .execute()
+        )
+        if not result.data:
+            return []
+
+        now = datetime.now(timezone.utc)
+
+        def pre_score(mem: dict) -> float:
+            imp = (mem.get("importance", 5) / 10.0) * 0.5
+            decay = mem.get("decay_score", 1.0) * 0.3
+            last_ref_str = mem.get("last_referenced")
+            recency = 0.3
+            if last_ref_str:
+                try:
+                    last_ref = datetime.fromisoformat(last_ref_str.replace("Z", "+00:00"))
+                    days_ago = (now - last_ref).total_seconds() / 86400
+                    recency = max(0.0, 1.0 - days_ago / 30.0)
+                except Exception:
+                    pass
+            return imp + decay + recency * 0.2
+
+        ranked = sorted(result.data, key=pre_score, reverse=True)
+        return ranked[:limit]
+    except Exception as e:
+        logger.error(f"get_memories_for_ranking: {e}")
+        return []
+
+
+def archive_memory(memory_id: str) -> bool:
+    """Archive a memory (mark as forgotten) without deleting it."""
+    try:
+        get_client().table("memories").update(
+            {"category": "forget"}
+        ).eq("id", memory_id).execute()
+        return True
+    except Exception as e:
+        logger.error(f"archive_memory: {e}")
+        return False
+
+
+def save_episode(summary: str, importance: int = 7) -> dict | None:
+    """Save a conversation episode summary as a special memory."""
+    try:
+        data = {
+            "content": summary,
+            "category": "episode",
+            "importance": max(1, min(10, importance)),
+            "decay_score": 1.0,
+            "times_referenced": 0,
+            "last_referenced": datetime.now(timezone.utc).isoformat(),
+        }
+        result = get_client().table("memories").insert(data).execute()
+        return result.data[0] if result.data else None
+    except Exception as e:
+        logger.error(f"save_episode: {e}")
+        return None
+
+
+def get_daily_proactive_count() -> int:
+    """Count proactive messages sent today."""
+    try:
+        today_start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+        result = (
+            get_client()
+            .table("conversations")
+            .select("id")
+            .eq("role", "sifra")
+            .eq("mood_detected", "proactive")
+            .gte("timestamp", today_start)
+            .execute()
+        )
+        return len(result.data) if result.data else 0
+    except Exception as e:
+        logger.error(f"get_daily_proactive_count: {e}")
+        return 0
+
+
+def get_last_proactive_timestamp() -> str | None:
+    """Get timestamp of the most recent proactive message."""
+    try:
+        result = (
+            get_client()
+            .table("conversations")
+            .select("timestamp")
+            .eq("role", "sifra")
+            .eq("mood_detected", "proactive")
+            .order("timestamp", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0].get("timestamp")
+        return None
+    except Exception as e:
+        logger.error(f"get_last_proactive_timestamp: {e}")
+        return None
 
 
 def get_all_memories(category: str | None = None) -> list[dict]:
@@ -349,6 +461,65 @@ def update_sifra_state(updates: dict) -> None:
             get_client().table("sifra_state").insert(updates).execute()
     except Exception as e:
         logger.error(f"update_sifra_state: {e}")
+
+
+def save_training_session(session_data: dict) -> None:
+    """Save training session results for adaptive future sessions."""
+    import json
+    try:
+        state = get_sifra_state()
+        history_raw = state.get("training_history", "[]")
+        if isinstance(history_raw, str):
+            try:
+                history = json.loads(history_raw)
+            except Exception:
+                history = []
+        else:
+            history = history_raw if isinstance(history_raw, list) else []
+
+        # Keep only last 10 sessions
+        history.append(session_data)
+        history = history[-10:]
+
+        update_sifra_state({"training_history": json.dumps(history)})
+        logger.info(f"Saved training session #{len(history)}")
+    except Exception as e:
+        logger.error(f"save_training_session: {e}")
+
+
+def get_training_history(limit: int = 5) -> list[dict]:
+    """Fetch recent training session data for adaptive curriculum."""
+    import json
+    try:
+        state = get_sifra_state()
+        history_raw = state.get("training_history", "[]")
+        if isinstance(history_raw, str):
+            try:
+                history = json.loads(history_raw)
+            except Exception:
+                return []
+        else:
+            history = history_raw if isinstance(history_raw, list) else []
+        return history[-limit:]
+    except Exception as e:
+        logger.error(f"get_training_history: {e}")
+        return []
+
+
+def get_past_training_topics() -> list[str]:
+    """Get all topics from previous training sessions (for dedup)."""
+    import json
+    try:
+        history = get_training_history(limit=10)
+        all_topics = []
+        for session in history:
+            topics = session.get("topics_used", [])
+            if isinstance(topics, list):
+                all_topics.extend(topics)
+        return all_topics
+    except Exception as e:
+        logger.error(f"get_past_training_topics: {e}")
+        return []
 
 
 # ===================================================================
@@ -577,4 +748,66 @@ def get_observation_stats(bot_name: str = "rumik") -> dict:
     except Exception as e:
         logger.error(f"get_observation_stats: {e}")
         return {"total_observations": 0, "analyzed": 0, "pending": 0, "learnings_count": 0}
+
+
+# ---------------------------------------------------------------------------
+# Proactive Messaging — Budget & Cooldown Tracking
+# ---------------------------------------------------------------------------
+
+def log_proactive_send(msg_type: str) -> None:
+    """
+    Log a proactive message send for budget/cooldown tracking.
+    Stores as JSON list in the proactive_sends column of sifra_state.
+    """
+    try:
+        import json
+        now = datetime.now(timezone.utc).isoformat()
+        
+        state = get_sifra_state()
+        raw = state.get("proactive_sends", "[]")
+        sends = json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, list) else [])
+
+        # Append new send
+        sends.append({"type": msg_type, "timestamp": now})
+
+        # Keep only last 30 entries to prevent bloat
+        sends = sends[-30:]
+
+        update_sifra_state({"proactive_sends": json.dumps(sends)})
+    except Exception as e:
+        logger.error(f"log_proactive_send: {e}")
+
+
+def get_daily_proactive_count() -> int:
+    """Count how many proactive messages were sent today (UTC)."""
+    try:
+        import json
+        state = get_sifra_state()
+        raw = state.get("proactive_sends", "[]")
+        sends = json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, list) else [])
+
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        count = sum(1 for s in sends if isinstance(s, dict) and s.get("timestamp", "").startswith(today))
+        return count
+    except Exception as e:
+        logger.error(f"get_daily_proactive_count: {e}")
+        return 0
+
+
+def get_last_proactive_timestamp() -> str | None:
+    """Get the timestamp of the most recent proactive message."""
+    try:
+        import json
+        state = get_sifra_state()
+        raw = state.get("proactive_sends", "[]")
+        sends = json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, list) else [])
+
+        if not sends:
+            return None
+
+        last = sends[-1]
+        return last.get("timestamp") if isinstance(last, dict) else None
+    except Exception as e:
+        logger.error(f"get_last_proactive_timestamp: {e}")
+        return None
 
