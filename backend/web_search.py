@@ -25,15 +25,16 @@ NEEDS SEARCH (return YES):
 - Factual questions: "iPhone 16 price kya hai", "who won IPL", "elon musk ne kya kiya"
 - Current events: "aaj kya hua", "latest news", "trending kya hai"
 - Knowledge questions: "quantum computing kya hota hai", "tell me about black holes"
+- Pop-culture / Media: "tmkoc funny episode batao", "famous dialogue of salman khan", "best scenes of friends"
 - Recommendations needing real data: "best laptop under 50k", "top movies 2026"
-- Anything where the answer requires up-to-date or specific factual information
+- Anything where the answer requires up-to-date, specific factual information, or specific TV/movie references
 
 DOES NOT NEED SEARCH (return NO):
 - Personal/emotional chat: "bore ho raha hun", "mood off hai", "kya haal hai"
 - Opinions/subjective: "kya lagta hai", "tujhe kya pasand hai"
 - Greetings: "hi", "good morning", "kaise ho"
 - Continuation of personal conversation
-- Jokes, memes, casual banter
+- Jokes, memes, casual banter (UNLESS they are asking for a specific episode/scene from a show)
 - Anything Sifra can answer from personality/opinions alone
 
 Return ONLY "YES" or "NO". Nothing else.
@@ -44,19 +45,18 @@ Recent conversation context: {context}"""
 
 QUERY_PROMPT = """Extract a clean, effective web search query from this conversational message.
 
+Use the provided "Recent Context" to understand what the user is referring to (e.g. if the message is "aur batao", and context shows they were talking about "tmkoc funny episodes", the search query should be "Taarak Mehta Ka Ooltah Chashmah funny episodes").
 The message is in Hinglish (Hindi+English mix). Convert it to a clean English search query that would give the best results on a search engine.
 
 Examples:
-- "bhai ye iPhone 16 ka price kya hai India mein" → "iPhone 16 price India 2026"
-- "yr elon musk ne kya kiya aaj" → "Elon Musk latest news today"
-- "konsi nayi movie aayi hai" → "new movie releases 2026"
-- "quantum computing kya hota hai" → "what is quantum computing explained"
-- "best laptop under 50k batao" → "best laptops under 50000 INR 2026"
-- "aaj delhi ka weather kaisa hai" → "Delhi weather today"
+- Msg: "bhai ye iPhone 16 ka price kya hai India mein", Context: "(no context)" → "iPhone 16 price India 2026"
+- Msg: "aur koi batao", Context: "User asked for TMKOC funny tracks" → "Taarak Mehta Ka Ooltah Chashmah best funny episodes list"
+- Msg: "quantum computing kya hota hai", Context: "(no context)" → "what is quantum computing explained"
 
 Return ONLY the search query. Nothing else. No quotes.
 
-Message: {message}"""
+Message: {message}
+Recent Context: {context}"""
 
 
 def should_search(message: str, recent_context: str = "") -> bool:
@@ -95,12 +95,12 @@ def _fallback_keyword_check(message: str) -> bool:
     return any(trigger in lower for trigger in triggers)
 
 
-def extract_query(message: str) -> str:
+def extract_query(message: str, recent_context: str = "") -> str:
     """AI-powered query extraction from conversational message."""
     try:
         query = ai_client.fast(
             system_prompt="Extract a clean web search query. Return ONLY the query text.",
-            user_prompt=QUERY_PROMPT.format(message=message),
+            user_prompt=QUERY_PROMPT.format(message=message, context=recent_context or "(no context)"),
             temperature=SEARCH_QUERY_TEMPERATURE,
             max_tokens=30,
         )
@@ -260,10 +260,10 @@ def _search_reddit(query: str) -> list[dict]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def search(message: str) -> str | None:
+def search(message: str, recent_context: str = "") -> str | None:
     """
     Full search pipeline:
-    1. Extract clean query from conversational message
+    1. Extract clean query from conversational message (using context if needed)
     2. Search DuckDuckGo (HTML first, API fallback)
     3. Search Reddit for discussions
     4. Format results for injection into Sifra's prompt
@@ -271,7 +271,7 @@ def search(message: str) -> str | None:
     Returns a formatted string or None if nothing found.
     """
     # Step 1: Extract a proper search query
-    query = extract_query(message)
+    query = extract_query(message, recent_context)
     logger.info(f"Search query extracted: '{query}' from message: '{message[:50]}'")
 
     # Step 2: Search

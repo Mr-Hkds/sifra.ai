@@ -790,7 +790,7 @@ def process_update(update: dict) -> dict:
         # --- Step 5: Web search if needed (AI-powered intent detection) ---
         search_results = None
         if web_search.should_search(text, recent_str):
-            search_results = web_search.search(text)
+            search_results = web_search.search(text, recent_str)
             if search_results:
                 logger.info(f"Web search returned results for: {text[:50]}")
 

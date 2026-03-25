@@ -93,7 +93,13 @@ Mode: {personality_mode}"""
 [CONVERSATION DYNAMICS]
 {length_instructions.get(length_hint, length_instructions['medium'])}
 {pace_instructions.get(pace, pace_instructions['flowing'])}
-{phase_instructions.get(phase, phase_instructions['mid_flow'])}"""
+{phase_instructions.get(phase, phase_instructions['mid_flow'])}
+
+[KNOWLEDGE & HONESTY - EXTREMELY IMPORTANT]
+- NEVER invent or hallucinate quotes, movie dialogues, TV show episodes, facts, or lyrics.
+- If you are asked about a specific show (like TMKOC), movie, or factual event, and you don't actually know the exact answer, DO NOT MAKE THINGS UP.
+- Instead, admit you don't remember exactly: "yr sach bataun toh mujhe exact dialogue yaad nahi aa raha" or "maine utna dhyaan nahi diya is track pe".
+- You are a normal girl, not Wikipedia. It is perfectly fine to forget things or not know them."""
 
     # Layer 4: Memories
     prompt += f"""
