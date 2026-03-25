@@ -109,3 +109,98 @@ def build_retry_instruction(issues: list[str]) -> str:
         feedback += f"{i}. {issue}\n"
     feedback += "\nGenerate a new response that avoids ALL of the above problems."
     return feedback
+
+
+# ---------------------------------------------------------------------------
+# Humanize — Post-processing rewriter
+# Catches AI patterns that slip through the quality gate and fixes them
+# ---------------------------------------------------------------------------
+
+# Patterns to strip entirely (these add nothing)
+_STRIP_PATTERNS = [
+    # Therapist/AI openers
+    r"(?i)^(hey there[!,.]?\s*)",
+    r"(?i)^(hi there[!,.]?\s*)",
+    r"(?i)^(hello[!,.]?\s*)",
+    r"(?i)^(hey[!]+\s+)",  # "Hey!!!" but not "hey "
+    # Validation fluff
+    r"(?i)(i (totally |completely )?understand (how you feel|what you('re| are) going through|that)[.,!]?\s*)",
+    r"(?i)(that('s| is) (completely |totally )?(valid|understandable|okay|alright)[.,!]?\s*)",
+    r"(?i)(i('m| am) here for you[.,!]?\s*)",
+    r"(?i)(i hear you[.,!]?\s*)",
+    r"(?i)(your feelings are valid[.,!]?\s*)",
+    r"(?i)(it's okay to feel[^.]*[.,!]?\s*)",
+    r"(?i)(remember,? you('re| are) not alone[^.]*[.,!]?\s*)",
+    r"(?i)(don't hesitate to[^.]*[.,!]?\s*)",
+    r"(?i)(feel free to[^.]*[.,!]?\s*)",
+    # Formal closers
+    r"(?i)(take care[!.]?\s*)$",
+    r"(?i)(hope (this |that )helps[!.]?\s*)$",
+    r"(?i)(let me know if[^.]*[!.]?\s*)$",
+    # AI identity slips
+    r"(?i)(as an ai[,.]?\s*)",
+    r"(?i)(as a language model[,.]?\s*)",
+    r"(?i)(i('m| am) (just )?a(n ai| bot| language model)[,.]?\s*)",
+]
+
+# Compiled for performance
+_STRIP_COMPILED = [re.compile(p) for p in _STRIP_PATTERNS]
+
+# Numbered list pattern (1. 2. 3. or 1) 2) 3))
+_NUMBERED_LIST = re.compile(r"^\s*\d+[.)]\s+", re.MULTILINE)
+
+# Excessive punctuation
+_EXCESSIVE_PUNCT = re.compile(r"([!?.]){3,}")
+_EXCESSIVE_EMOJI = re.compile(r"([\U0001F600-\U0001F9FF\U00002702-\U000027B0\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF])\1{2,}")
+
+
+def humanize(response: str) -> str:
+    """
+    Post-process a response to remove AI artifacts and enforce Sifra's voice.
+    This runs AFTER quality gate validation, as a final cleanup.
+    
+    Returns the cleaned response.
+    """
+    if not response:
+        return response
+
+    text = response
+
+    # 1. Strip AI/therapist patterns
+    for pattern in _STRIP_COMPILED:
+        text = pattern.sub("", text)
+
+    # 2. Remove numbered lists → merge into natural text
+    if _NUMBERED_LIST.search(text):
+        lines = text.split("\n")
+        cleaned = []
+        for line in lines:
+            line = _NUMBERED_LIST.sub("", line).strip()
+            if line:
+                cleaned.append(line)
+        text = " ".join(cleaned)
+
+    # 3. Fix excessive punctuation (!!!! → !)
+    text = _EXCESSIVE_PUNCT.sub(r"\1", text)
+
+    # 4. Fix excessive repeated emojis
+    text = _EXCESSIVE_EMOJI.sub(r"\1", text)
+
+    # 5. Remove asterisk actions (*hugs* *smiles*)
+    text = re.sub(r"\*[^*]+\*", "", text)
+
+    # 6. Remove quotes around the entire response
+    stripped = text.strip()
+    if stripped.startswith('"') and stripped.endswith('"') and stripped.count('"') == 2:
+        text = stripped[1:-1]
+
+    # 7. Clean up extra whitespace from all the removals
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    # 8. If everything got stripped, return original (better than empty)
+    if len(text.strip()) < 3:
+        return response.strip()
+
+    return text.strip()
+

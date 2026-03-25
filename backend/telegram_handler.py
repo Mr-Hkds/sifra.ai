@@ -11,6 +11,9 @@ import logging
 import threading
 
 import requests
+import time
+
+import quality_gate
 
 import sentiment as sentiment_engine
 import context_engine
@@ -57,6 +60,62 @@ def send_message(chat_id: int | str, text: str) -> bool:
     except Exception as e:
         logger.error(f"send_message failed: {e}")
         return False
+
+
+def send_typing_indicator(chat_id: int | str) -> None:
+    """Show 'typing...' indicator in the chat. Makes Sifra feel human."""
+    try:
+        requests.post(
+            f"{TELEGRAM_API}/sendChatAction",
+            json={"chat_id": chat_id, "action": "typing"},
+            timeout=3,
+        )
+    except Exception:
+        pass  # Non-critical, don't break the flow
+
+
+def send_messages_split(chat_id: int | str, text: str) -> bool:
+    """
+    Send a response as multiple messages if it has natural break points.
+    This mimics how real people text — in fragments, not paragraphs.
+    
+    Split rules:
+    - If text has \n breaks, split there
+    - If text is > 100 chars with no breaks, split at sentence boundaries
+    - Send each part with a small typing delay between them
+    """
+    # Check for explicit line breaks first
+    parts = [p.strip() for p in text.split("\n") if p.strip()]
+    
+    if len(parts) == 1 and len(text) > 100:
+        # No line breaks but long — try splitting at sentence boundaries
+        import re as _re
+        sentences = _re.split(r'(?<=[.!?])\s+', text)
+        if len(sentences) > 1:
+            # Group sentences into 2-3 parts max
+            mid = len(sentences) // 2
+            parts = [
+                " ".join(sentences[:mid]),
+                " ".join(sentences[mid:]),
+            ]
+    
+    # Cap at 3 parts max
+    if len(parts) > 3:
+        parts = [" ".join(parts[:2]), " ".join(parts[2:])]
+    
+    if len(parts) <= 1:
+        return send_message(chat_id, text)
+    
+    # Send each part with typing delay
+    for i, part in enumerate(parts):
+        if not part:
+            continue
+        if i > 0:
+            send_typing_indicator(chat_id)
+            time.sleep(random.uniform(0.8, 1.8))  # Natural gap between messages
+        send_message(chat_id, part)
+    
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -713,7 +772,10 @@ def process_update(update: dict) -> dict:
             if search_results:
                 logger.info(f"Web search returned results for: {text[:50]}")
 
-        # --- Step 6: Generate response ---
+        # --- Step 6: Show typing indicator ---
+        send_typing_indicator(chat_id)
+
+        # --- Step 7: Generate response ---
         state = get_sifra_state()
         core_rules = str(state.get("core_rules", ""))
 
@@ -725,7 +787,10 @@ def process_update(update: dict) -> dict:
             web_search_results=search_results,
         )
 
-        # --- Step 7: Parse internal AI actions ---
+        # --- Step 7.5: Humanize — strip AI slop ---
+        reply = quality_gate.humanize(reply)
+
+        # --- Step 8: Parse internal AI actions ---
         # Parse reactions
         react_match = ACTION_REACT_PATTERN.search(reply)
         react_emoji = react_match.group(1).strip() if react_match else None
@@ -744,14 +809,14 @@ def process_update(update: dict) -> dict:
         if gif_match:
             reply = ACTION_GIF_PATTERN.sub("", reply).strip()
 
-        # --- Step 8: Save Sifra's response ---
+        # --- Step 9: Save Sifra's response ---
         save_conversation(
             "sifra", reply,
             mood_detected=context["sentiment"].emotion,
             platform="telegram",
         )
 
-        # --- Step 9: React to user's message ---
+        # --- Step 10: React to user's message ---
         # Priority: AI's explicit [REACT] > auto content/mood reaction
         message_id = message.get("message_id")
         if message_id:
@@ -767,9 +832,19 @@ def process_update(update: dict) -> dict:
                     daemon=True,
                 ).start()
 
-        # --- Step 10: Send actual reply text ---
+        # --- Step 11: Natural response delay ---
+        # No human responds in 200ms. Add a small reading delay.
+        msg_len = len(text)
+        if msg_len < 20:
+            time.sleep(random.uniform(0.5, 1.5))
+        elif msg_len < 80:
+            time.sleep(random.uniform(1.0, 2.5))
+        else:
+            time.sleep(random.uniform(1.5, 3.0))
+
+        # --- Step 12: Send actual reply text ---
         if reply:
-            send_message(chat_id, reply)
+            send_messages_split(chat_id, reply)
 
         # --- Step 11: Send sticker or GIF if AI asked to ---
         if sticker_mood:
