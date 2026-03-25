@@ -87,6 +87,62 @@ MOOD_REACTIONS = {
 # Generic reactions for any mood
 GENERIC_REACTIONS = ["👍", "👀", "😂", "🔥", "❤️", "💀"]
 
+# Content-based reaction triggers (keyword → emoji)
+# These fire autonomously based on message content, not AI decision
+CONTENT_REACTIONS = {
+    # Humor signals
+    "😂": ["lmao", "lmfao", "rofl", "hahaha", "🤣", "dead", "ded", "bruh moment"],
+    "💀": ["dead", "ded", "mara", "mar gaya", "rip", "☠️", "skull"],
+    # Affection signals  
+    "❤️": ["love you", "miss you", "miss karta", "yaad aa rahi", "❤️", "🥰", "pyaar"],
+    "🥺": ["please", "plsss", "pretty please", "sorry", "maaf"],
+    # Excitement signals
+    "🔥": ["fire", "lit", "amazing", "insane", "crazy good", "mast", "zabardast", "kamaal"],
+    "🎉": ["congrats", "congratulations", "passed", "won", "selected", "got it", "cleared"],
+    # Empathy signals
+    "😢": ["sad", "dukhi", "crying", "ro raha", "bura laga", "toot gaya"],
+    # Interest signals  
+    "👀": ["guess what", "sun na", "bata kya hua", "surprise", "something happened"],
+    "🤔": ["what if", "kya socha", "think about", "soch raha"],
+}
+
+AUTO_REACTION_CHANCE = 0.30  # 30% chance of auto-reacting per message
+
+
+def _pick_content_reaction(text: str) -> str | None:
+    """Pick a contextually relevant reaction based on message content keywords."""
+    text_lower = text.lower()
+    matched = []
+    
+    for emoji, triggers in CONTENT_REACTIONS.items():
+        for trigger in triggers:
+            if trigger in text_lower:
+                matched.append(emoji)
+                break
+    
+    if matched:
+        return random.choice(matched)
+    return None
+
+
+def pick_smart_reaction(text: str, mood: str) -> str | None:
+    """
+    Intelligently pick a reaction emoji based on message content + mood.
+    Returns None if no reaction should be sent (random gating).
+    """
+    # Only auto-react ~30% of the time so it doesn't feel spammy
+    if random.random() > AUTO_REACTION_CHANCE:
+        return None
+    
+    # Priority 1: Content-based (most relevant)
+    content_emoji = _pick_content_reaction(text)
+    if content_emoji:
+        return content_emoji
+    
+    # Priority 2: Mood-based
+    mood_emojis = MOOD_REACTIONS.get(mood, GENERIC_REACTIONS)
+    return random.choice(mood_emojis)
+
 
 def react_to_message_explicit(chat_id: int | str, message_id: int, emoji: str) -> bool:
     """Set a specific emoji reaction on a user's message."""
@@ -97,12 +153,12 @@ def react_to_message_explicit(chat_id: int | str, message_id: int, emoji: str) -
                 "chat_id": chat_id,
                 "message_id": message_id,
                 "reaction": [{"type": "emoji", "emoji": emoji}],
-                "is_big": random.random() < 0.2,  # 20% chance of big reaction if AI chooses it
+                "is_big": random.random() < 0.15,
             },
             timeout=5,
         )
         if resp.status_code == 200:
-            logger.info(f"Explicitly reacted with {emoji} to message {message_id}")
+            logger.info(f"Reacted with {emoji} to message {message_id}")
             return True
         else:
             logger.warning(f"Reaction failed: {resp.status_code} - {resp.text[:100]}")
@@ -695,13 +751,19 @@ def process_update(update: dict) -> dict:
             platform="telegram",
         )
 
-        # --- Step 9: React to user's message if AI asked to ---
-        if react_emoji:
-            message_id = message.get("message_id")
-            if message_id:
+        # --- Step 9: React to user's message ---
+        # Priority: AI's explicit [REACT] > auto content/mood reaction
+        message_id = message.get("message_id")
+        if message_id:
+            final_reaction = react_emoji  # AI's explicit choice
+            if not final_reaction:
+                # Auto-react based on content + mood (30% chance)
+                final_reaction = pick_smart_reaction(text, context["sentiment"].emotion)
+            
+            if final_reaction:
                 threading.Thread(
                     target=react_to_message_explicit,
-                    args=(chat_id, message_id, react_emoji),
+                    args=(chat_id, message_id, final_reaction),
                     daemon=True,
                 ).start()
 

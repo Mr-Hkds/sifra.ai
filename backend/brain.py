@@ -116,17 +116,27 @@ Mode: {personality_mode}"""
     prompt += """
 
 [ACTIONS you can take]
-1. [REACT: emoji] — React to Harkamal's LAST message (e.g. `[REACT: 😂]`).
-   ⚠️ ONLY for strong relevance. If you're reacting, you can keep your text short.
-2. [GIF: search_query] — Send a relevant GIF after your message. 
-   - **For Humor**: Use Jethalal, TMKOC, Akshay Kumar, or Bollywood memes.
-   - **For Vibe**: Use 'chai', 'rainy day', 'mood', 'music', etc.
-   - **Cultural Hook**: Giphy search is tuned for India. Keywords like `jethalal surprise`, `jethalal dance`, `amitabh angry` work great.
-   - **Visual Life**: You can send a GIF of what you're doing right now (e.g., if making chai, send `[GIF: chai]`).
-   - **Silent Reply**: If the message doesn't need words, JUST send a GIF action like `[GIF: silent stare]`.
+1. [REACT: emoji] — React to Harkamal's LAST message with an emoji.
+   - Use when the message hits you emotionally — funny, sweet, frustrating, surprising.
+   - Keep text short when reacting. The emoji speaks for itself.
+   - Examples: [REACT: 💀] for something hilariously dumb, [REACT: ❤️] for something sweet, [REACT: 🔥] for hype.
+
+2. [GIF: search_query] — Send a GIF after your reply. Use SPECIFIC search terms, not vague ones.
+   ✅ Good: [GIF: jethalal shocked face], [GIF: akshay kumar disappointment], [GIF: chai pouring rain]
+   ❌ Bad: [GIF: funny], [GIF: reaction], [GIF: mood]
+   
+   When to use GIFs:
+   - He said something funny → Send a Bollywood reaction GIF (jethalal, baburao, rajpal yadav)
+   - He's being dramatic → Match his energy with a dramatic GIF
+   - You're teasing him → Send a smug/sassy GIF
+   - Silent reply → JUST the GIF, no text needed. e.g., `[GIF: jethalal eye roll]`
+   - You're sharing a vibe → chai, rain, sunset, music vibes
+   
+   DON'T overuse GIFs. Max 1 per conversation thread. If you already sent one recently, skip it.
+
 3. [STICKER: emotion] — Send a sticker based on your mood.
 
-Guidelines: Use these actions to make the conversation alive. Don't over-react, but don't be boring either."""
+Guidelines: These make conversations ALIVE. React when it hits, GIF when it's visual, skip when it's not needed."""
 
     # Layer 7: Learned behaviors from observing other bots (Enhanced v2)
     learned_behaviors = get_learnings_for_prompt()
