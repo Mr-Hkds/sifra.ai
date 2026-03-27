@@ -1,6 +1,6 @@
 # SIFRA:MIND — AI Companion System
 
-A full-stack AI companion system featuring **Sifra Sharma** — a 22-year-old cybersecurity student from Nainital who speaks in natural Hinglish. The system includes a Python/Flask backend powering a Telegram bot and a React dashboard for neural observation.
+A full-stack AI companion system featuring **Sifra Sharma** — a 25-year-old mass communication student from Nainital who speaks in natural Hinglish. The system includes a Python/Flask backend powering a Telegram bot and a React dashboard for neural observation.
 
 ## Architecture
 
