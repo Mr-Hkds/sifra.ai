@@ -45,7 +45,7 @@ def insert_memory(content: str, category: str, importance: int, embedding: list[
             "category": category,
             "importance": max(1, min(10, importance)),
             "decay_score": 1.0,
-            "times_referenced": 0,
+            "times_referenced": 1,
             "last_referenced": datetime.now(timezone.utc).isoformat(),
         }
         if embedding:

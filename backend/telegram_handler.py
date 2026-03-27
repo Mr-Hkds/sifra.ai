@@ -9,6 +9,7 @@ import re
 import random
 import logging
 import threading
+from datetime import datetime, timezone
 
 import requests
 import time
@@ -881,11 +882,75 @@ def process_update(update: dict) -> dict:
         # --- Step 13: Memory extraction (Synchronous for Vercel) ---
         _extract_memories_async(text, recent_str)
 
+        # --- Step 14: Organic proactive check (piggyback on webhook) ---
+        # No cron — feels natural. Checks hour + random chance.
+        _maybe_send_proactive()
+
         return {"success": True, "reply": reply}
 
     except Exception as e:
         logger.error(f"process_update failed: {e}")
         return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Organic Proactive Messaging — piggybacks on webhook, no cron
+# ---------------------------------------------------------------------------
+
+def _maybe_send_proactive() -> None:
+    """
+    Called at the end of every webhook message. Checks the IST hour and
+    probabilistically sends a good morning or good night message.
+    
+    Rules:
+    - Morning window: 6:00-9:00 AM IST → 30% chance
+    - Night window: 22:00-00:00 IST → 30% chance
+    - Max 1 morning + 1 night per day (tracked in sifra_state)
+    - Sends AFTER a small delay so it doesn't feel instant
+    """
+    try:
+        from datetime import timedelta
+        from config import TIMEZONE_OFFSET, GOOD_MORNING_CHANCE, GOOD_NIGHT_CHANCE
+
+        ist_hour = (datetime.now(timezone.utc) + timedelta(hours=TIMEZONE_OFFSET)).hour
+        ist_date = (datetime.now(timezone.utc) + timedelta(hours=TIMEZONE_OFFSET)).strftime("%Y-%m-%d")
+
+        state = get_sifra_state() or {}
+        last_gm = state.get("last_good_morning", "")
+        last_gn = state.get("last_good_night", "")
+
+        msg_type = None
+
+        # Morning window: 6-9 AM IST
+        if 6 <= ist_hour <= 9 and last_gm != ist_date:
+            if random.random() < GOOD_MORNING_CHANCE:
+                msg_type = "good_morning"
+
+        # Night window: 22-23 IST (10 PM - midnight)
+        elif 22 <= ist_hour <= 23 and last_gn != ist_date:
+            if random.random() < GOOD_NIGHT_CHANCE:
+                msg_type = "good_night"
+
+        if not msg_type:
+            return
+
+        # Small delay so it doesn't arrive glued to the reply
+        time.sleep(random.uniform(2.0, 5.0))
+
+        from proactive import send_proactive
+        result = send_proactive(msg_type)
+
+        if result.get("sent"):
+            # Track that we sent today's greeting so we don't repeat
+            if msg_type == "good_morning":
+                update_sifra_state({"last_good_morning": ist_date})
+            else:
+                update_sifra_state({"last_good_night": ist_date})
+            logger.info(f"Organic proactive sent: {msg_type}")
+
+    except Exception as e:
+        # Never break the main pipeline for proactive
+        logger.warning(f"Proactive check failed (non-fatal): {e}")
 
 
 # ---------------------------------------------------------------------------
