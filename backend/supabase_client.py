@@ -463,63 +463,6 @@ def update_sifra_state(updates: dict) -> None:
         logger.error(f"update_sifra_state: {e}")
 
 
-def save_training_session(session_data: dict) -> None:
-    """Save training session results for adaptive future sessions."""
-    import json
-    try:
-        state = get_sifra_state()
-        history_raw = state.get("training_history", "[]")
-        if isinstance(history_raw, str):
-            try:
-                history = json.loads(history_raw)
-            except Exception:
-                history = []
-        else:
-            history = history_raw if isinstance(history_raw, list) else []
-
-        # Keep only last 10 sessions
-        history.append(session_data)
-        history = history[-10:]
-
-        update_sifra_state({"training_history": json.dumps(history)})
-        logger.info(f"Saved training session #{len(history)}")
-    except Exception as e:
-        logger.error(f"save_training_session: {e}")
-
-
-def get_training_history(limit: int = 5) -> list[dict]:
-    """Fetch recent training session data for adaptive curriculum."""
-    import json
-    try:
-        state = get_sifra_state()
-        history_raw = state.get("training_history", "[]")
-        if isinstance(history_raw, str):
-            try:
-                history = json.loads(history_raw)
-            except Exception:
-                return []
-        else:
-            history = history_raw if isinstance(history_raw, list) else []
-        return history[-limit:]
-    except Exception as e:
-        logger.error(f"get_training_history: {e}")
-        return []
-
-
-def get_past_training_topics() -> list[str]:
-    """Get all topics from previous training sessions (for dedup)."""
-    import json
-    try:
-        history = get_training_history(limit=10)
-        all_topics = []
-        for session in history:
-            topics = session.get("topics_used", [])
-            if isinstance(topics, list):
-                all_topics.extend(topics)
-        return all_topics
-    except Exception as e:
-        logger.error(f"get_past_training_topics: {e}")
-        return []
 
 
 # ===================================================================

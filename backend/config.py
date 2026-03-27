@@ -111,19 +111,7 @@ OBSERVATION_BATCH_SIZE = 10          # Analyze after this many observations
 OBSERVATION_MAX_LEARNINGS = 80       # Max stored learning patterns (up from 50)
 OBSERVATION_ANALYSIS_TEMPERATURE = 0.40  # Slightly higher for richer patterns
 
-# ---------------------------------------------------------------------------
-# Auto-Training Bot (Telethon — direct Rumik conversations)
-# ---------------------------------------------------------------------------
-TELEGRAM_API_ID = int(os.environ.get("TELEGRAM_API_ID", "33754919"))
-TELEGRAM_API_HASH = os.environ.get("TELEGRAM_API_HASH", "cd3ec4b240056a9a1d5655d9971fa07f")
-TELEGRAM_SESSION = os.environ.get("TELEGRAM_SESSION", "")  # StringSession
-TRAINING_MESSAGES_PER_SESSION = 45    # Messages per training run (increased for 6 phases)
-TRAINING_RESPONSE_WAIT = 15          # Seconds to wait for Rumik's reply
-TRAINING_COOLDOWN = 10                # Seconds between messages
-TRAINING_THREAD_DEPTH = 5            # Max follow-ups per conversation thread (deeper threads)
-TRAINING_FOLLOW_UP_WAIT = 15          # Seconds to wait before sending follow-up
-TRAINING_MASTERY_THRESHOLD = 8.0   # Skip phase if avg quality above this
-TRAINING_WEAKNESS_THRESHOLD = 5.0  # Focus on phase if avg quality below this
+
 
 # ---------------------------------------------------------------------------
 # Version
