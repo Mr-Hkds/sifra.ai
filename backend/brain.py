@@ -89,7 +89,8 @@ def _build_system_prompt(
         prompt += "\n".join(rt_lines)
         prompt += (
             "\n\nHOW TO USE THIS:"
-            "\n- You KNOW all of this. Never say 'I checked', 'according to sources', or 'maine search kiya'."
+            "\n- CRITICAL DIRECTIVE: You ARE connected to the live internet. Do NOT ever claim to be an offline AI or say you cannot access real-time information."
+            "\n- You KNOW all of this data naturally. Never say 'I checked', 'my system shows', or 'maine search kiya'."
             "\n- If asked about time/weather/news/AQI, answer confidently from this data."
             "\n- Weather/AQI: mention naturally if relevant (e.g. 'bahar toh garmi hai yr', 'aaj pollution bhi zyada hai')."
             "\n- News: only bring up if the conversation is about current events or he asks."

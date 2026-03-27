@@ -184,16 +184,17 @@ def api_status():
 
     modules = {
         "brain": "Core AI Brain (layered prompts + quality gate)",
-        "ai_client": "Multi-Provider AI Client (Gemini → Groq cascade)",
-        "sentiment": "AI Sentiment Analysis (replaces keyword matching)",
+        "ai_client": "Multi-Provider AI Client (Gemini 2.5 Flash → Groq Llama 3.3 70B → Groq 8B)",
+        "sentiment": "AI Sentiment Analysis",
         "context_engine": "Context Engine (time + mood + energy → mode)",
+        "sifra_realtime": "Real-Time Awareness (Live Weather, AQI, UV, News)",
         "personality": "Personality System (identity + style + constraints)",
         "memory_engine": "Memory Engine (contextual retrieval + decay)",
         "quality_gate": "Quality Gate (anti-AI-slop filter)",
         "telegram_handler": "Telegram Integration (pipeline + group observer)",
         "proactive": "Proactive Messaging (greetings, gossip, kidhar ho)",
         "web_search": "Web Search (DuckDuckGo + Reddit)",
-        "observation_engine": "Observation Learning (learn from other bots)",
+        "observation_engine": "Observation Learning (learn from Rumik.ai)",
         "supabase_client": "Database Client (Supabase)",
     }
     module_status = {}
@@ -224,24 +225,22 @@ def api_status():
         db_status = f"error: {str(e)[:80]}"
 
     features = [
-        "Multi-Provider AI (Gemini + Groq cascade)",
-        "AI Sentiment Analysis (not keywords)",
+        "Multi-Provider AI Cascade (Gemini Flash → Groq Llama 3.3 70B)",
+        "Real-Time Awareness (Live IST Time, Delhi Weather, AQI, News)",
+        "Per-Source TTL Caching & Stale-while-revalidate",
+        "AI Sentiment Analysis",
         "Context-Aware Memory Retrieval",
-        "Layered Prompt Architecture (7 layers)",
+        "Layered Prompt Architecture",
         "Response Quality Gate + Auto-Retry",
         "Anti-Repetition + Opener Variety Guard",
-        "Sarcasm Detection",
         "Dynamic Personality Modes (8 modes)",
-        "Proactive Messaging (7 types)",
+        "Proactive Messaging Generators (7 types)",
         "Spontaneous Memory Recall",
-        "AI-Powered Web Search (intent + query extraction)",
+        "AI-Powered Web Search (intent extraction)",
         "Memory Decay System",
-        "Core Rules (Secret Element)",
         "Conversation Threading (18 msg context)",
         "Conversation Dynamics (pace, phase, length hints)",
         "Sifra Activity Generator (own life simulation)",
-        "AI-Controlled Emoji Reactions",
-        "AI-Controlled Sticker Sending",
         "Observation Learning (learn from Rumik.ai)",
         "High-Energy, Gossipy Messaging Style",
     ]
