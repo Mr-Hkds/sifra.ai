@@ -19,7 +19,7 @@ from memory_engine import (
     should_spontaneously_recall, get_random_memory,
 )
 from observation_engine import get_learnings_for_prompt
-from realtime import get_realtime_context
+from sifra_realtime import get_realtime_context
 from config import CONVERSATION_CONTEXT_LIMIT, NEWS_API_KEY
 
 logger = logging.getLogger(__name__)
