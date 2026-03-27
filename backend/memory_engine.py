@@ -75,7 +75,10 @@ def extract_memories(user_message: str, recent_context: str = "") -> list[dict]:
         return []
 
     if not raw:
+        logger.warning("Memory extraction: AI returned empty response")
         return []
+
+    logger.debug(f"Memory extraction raw AI response: {raw[:300]}")
 
     # Parse JSON from response
     try:
@@ -129,7 +132,10 @@ def extract_memories(user_message: str, recent_context: str = "") -> list[dict]:
             "importance": importance,
         })
 
-    logger.info(f"Extracted {len(validated)} memories from message")
+    if validated:
+        logger.info(f"Extracted {len(validated)} memories from message: {[m['content'][:40] for m in validated]}")
+    else:
+        logger.debug(f"Memory extraction found nothing worth remembering in: {user_message[:80]}")
     return validated
 
 

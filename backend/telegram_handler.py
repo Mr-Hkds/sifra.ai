@@ -786,6 +786,15 @@ def process_update(update: dict) -> dict:
         # --- Step 4: Save user message ---
         save_conversation("user", text, mood_detected=user_sentiment.emotion, platform="telegram")
 
+        # --- Step 4.5: Memory extraction (EARLY — before expensive response gen) ---
+        # Must run early to avoid Vercel timeout. Only needs user_message + context.
+        try:
+            mem_count = memory_engine.process_extraction(text, recent_str)
+            if mem_count > 0:
+                logger.info(f"Extracted and stored {mem_count} memories")
+        except Exception as mem_err:
+            logger.error(f"Memory extraction failed: {mem_err}")
+
         # --- Step 5: Web search if needed (AI-powered intent detection) ---
         search_results = None
         if web_search.should_search(text, recent_str):
@@ -879,13 +888,6 @@ def process_update(update: dict) -> dict:
         }
         update_sifra_state(sifra_state_update)
 
-        # --- Step 13: Memory extraction (Synchronous for Vercel) ---
-        try:
-            mem_count = memory_engine.process_extraction(text, recent_str)
-            if mem_count > 0:
-                logger.info(f"Extracted and stored {mem_count} memories")
-        except Exception as mem_err:
-            logger.error(f"Memory extraction failed: {mem_err}")
 
         # --- Step 14: Organic proactive check (piggyback on webhook) ---
         # No cron — feels natural. Checks hour + random chance.
