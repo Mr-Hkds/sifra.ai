@@ -393,6 +393,7 @@ ADMIN_COMMANDS = {
     "/sifra_clear_mem": "Clear all memories",
     "/sifra_clear_conv": "Clear all conversations",
     "/sifra_learn_status": "Show observation learning stats",
+    "/correct": "Save a correction as a memory (e.g. /correct My birthday is March 14)",
     "/sifra_help": "Show admin commands",
 }
 
@@ -441,6 +442,9 @@ def _handle_admin_command(text: str, chat_id: int | str) -> dict | None:
 
     if cmd == "/sifra_learn_status":
         return _send_learn_status(chat_id)
+
+    if cmd == "/correct":
+        return _handle_correct(text, chat_id)
 
 
 
@@ -498,6 +502,43 @@ def _send_learn_status(chat_id: int | str) -> dict:
 
     msg += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
     send_message(chat_id, msg)
+    return {"success": True}
+
+
+def _handle_correct(text: str, chat_id: int | str) -> dict:
+    """
+    Handle /correct command — save a user correction directly as a high‐importance memory.
+    Usage: /correct My birthday is March 14
+    This bypasses AI extraction entirely for guaranteed storage.
+    """
+    # Strip the command prefix
+    correction = text.strip()
+    if correction.lower().startswith("/correct"):
+        correction = correction[8:].strip()
+
+    if not correction or len(correction) < 3:
+        send_message(chat_id, "Usage: <code>/correct [fact]</code>\nExample: <code>/correct My birthday is March 14</code>")
+        return {"success": True}
+
+    try:
+        from supabase_client import insert_memory
+        result = insert_memory(
+            content=f"CORRECTION: {correction}",
+            category="core",
+            importance=10,  # Max importance for direct corrections
+            embedding=None,
+        )
+        if result:
+            send_message(chat_id, f"✅ Saved correction:\n\n\"{correction}\"")
+            save_conversation("user", text, platform="telegram")
+            logger.info(f"Correction saved: {correction[:80]}")
+        else:
+            send_message(chat_id, "❌ Failed to save correction. DB returned None.")
+            logger.error(f"Correction insert failed for: {correction[:80]}")
+    except Exception as e:
+        logger.error(f"Correction handler failed: {e}")
+        send_message(chat_id, f"❌ Error saving correction: {str(e)[:100]}")
+
     return {"success": True}
 
 

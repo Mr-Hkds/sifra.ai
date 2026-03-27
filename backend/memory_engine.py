@@ -58,12 +58,42 @@ USER MESSAGE (Extract facts ONLY from this!):
 def extract_memories(user_message: str, recent_context: str = "") -> list[dict]:
     """
     Extract memorable facts from a user message using AI.
+    Uses the FAST model (Groq 8B) for instant inference to stay within Vercel's timeout.
     Returns a list of memory dicts with content, category, importance.
     """
-    result = ai_client.extract_json(
-        system_prompt="Extract memories from conversations. Return valid JSON with a 'memories' key.",
-        user_prompt=EXTRACTION_PROMPT.format(message=user_message, context=recent_context or "(no context)"),
-    )
+    prompt = EXTRACTION_PROMPT.format(message=user_message, context=recent_context or "(no context)")
+    
+    try:
+        raw = ai_client.fast(
+            system_prompt="Extract memories from conversations. Return valid JSON with a 'memories' key. If nothing worth remembering, return {\"memories\": []}.",
+            user_prompt=prompt,
+            temperature=0.15,
+            max_tokens=300,
+        )
+    except Exception as e:
+        logger.error(f"Memory extraction AI call failed: {e}")
+        return []
+
+    if not raw:
+        return []
+
+    # Parse JSON from response
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        # Try cleaning markdown fences
+        clean = raw.strip()
+        if clean.startswith("```json"):
+            clean = clean[7:]
+        elif clean.startswith("```"):
+            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+        if clean.endswith("```"):
+            clean = clean[:-3]
+        try:
+            result = json.loads(clean.strip())
+        except json.JSONDecodeError:
+            logger.warning(f"Memory extraction: could not parse JSON from: {raw[:200]}")
+            return []
 
     # Handle both {"memories": [...]} and direct [...] formats
     if isinstance(result, dict):
@@ -99,6 +129,7 @@ def extract_memories(user_message: str, recent_context: str = "") -> list[dict]:
             "importance": importance,
         })
 
+    logger.info(f"Extracted {len(validated)} memories from message")
     return validated
 
 
@@ -119,68 +150,44 @@ Return JSON: {{"contradicts": true/false, "reason": "brief explanation"}}"""
 
 def store_memories(extracted: list[dict]) -> int:
     """
-    Store extracted memories with smart dedup and contradiction resolution.
-    If similar exists, update. If contradicts, archive old and store new.
+    Store extracted memories with smart dedup.
+    Optimized for Vercel: skips expensive embedding/contradiction checks.
     Returns count of memories processed.
     """
     from supabase_client import (
         insert_memory, find_similar_memory, update_memory_reference,
-        archive_memory, get_all_active_memories,
     )
 
     count = 0
-    all_memories = None  # Lazy load
 
     for mem in extracted:
         content = mem["content"]
         category = mem["category"]
         importance = mem["importance"]
 
-        # Generate mathematical vector for semantic mesh mapping
-        embedding = ai_client.get_embedding(content)
+        # Step 1: Check for near-duplicate (fast text comparison, no AI call)
+        try:
+            existing = find_similar_memory(content)
+            if existing:
+                new_imp = max(existing.get("importance", 5), importance)
+                update_memory_reference(existing["id"], new_importance=new_imp)
+                logger.info(f"Updated existing memory: {content[:50]}")
+                count += 1
+                continue
+        except Exception as e:
+            logger.warning(f"Dedup check failed, inserting anyway: {e}")
 
-        # Step 1: Check for near-duplicate
-        existing = find_similar_memory(content)
-        if existing:
-            new_imp = max(existing.get("importance", 5), importance)
-            update_memory_reference(existing["id"], new_importance=new_imp)
-            count += 1
-            continue
-
-        # Step 2: Check for contradictions (only for core/habit/preference)
-        if category in ("core", "habit", "preference"):
-            if all_memories is None:
-                all_memories = get_all_active_memories()
-
-            same_category = [
-                m for m in all_memories
-                if m.get("category") == category
-            ]
-
-            for old_mem in same_category:
-                try:
-                    result = ai_client.extract_json(
-                        system_prompt="Check for factual contradictions. Return valid JSON.",
-                        user_prompt=CONTRADICTION_PROMPT.format(
-                            existing=old_mem.get("content", ""),
-                            new=content,
-                        ),
-                        temperature=0.1,
-                        max_tokens=100,
-                    )
-                    if isinstance(result, dict) and result.get("contradicts"):
-                        logger.info(
-                            f"Contradiction found: archiving old memory '{old_mem.get('content', '')[:50]}' "
-                            f"→ replaced with '{content[:50]}'"
-                        )
-                        archive_memory(old_mem["id"])
-                        break
-                except Exception as e:
-                    logger.warning(f"Contradiction check failed: {e}")
-
-        # Step 3: Insert new memory with semantic vector
-        insert_memory(content, category, importance, embedding=embedding)
-        count += 1
+        # Step 2: Insert new memory (no embedding — saves 3-5s per memory)
+        # Embeddings can be backfilled later via a batch job
+        try:
+            result = insert_memory(content, category, importance, embedding=None)
+            if result:
+                logger.info(f"Stored memory: [{category}] {content[:60]}")
+                count += 1
+            else:
+                logger.error(f"insert_memory returned None for: {content[:60]}")
+        except Exception as e:
+            logger.error(f"Failed to store memory: {e}")
 
     return count
 
