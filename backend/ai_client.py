@@ -303,3 +303,24 @@ def extract_json(
     except Exception as e:
         logger.error(f"extract_json failed: {e}")
         return []
+
+
+def get_embedding(text: str) -> list[float] | None:
+    """
+    Generate a 768-dimensional vector embedding for a piece of text.
+    Uses Google's text-embedding-004 model via the official google-genai SDK.
+    """
+    if not GEMINI_API_KEY:
+        return None
+        
+    try:
+        from google import genai
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = client.models.embed_content(
+            model='text-embedding-004',
+            contents=text,
+        )
+        return response.embeddings[0].values
+    except Exception as e:
+        logger.error(f"Gemini embedding failed: {e}")
+        return None

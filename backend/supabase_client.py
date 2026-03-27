@@ -37,8 +37,8 @@ def get_client() -> Client:
 # MEMORIES
 # ===================================================================
 
-def insert_memory(content: str, category: str, importance: int) -> dict | None:
-    """Insert a new memory."""
+def insert_memory(content: str, category: str, importance: int, embedding: list[float] | None = None) -> dict | None:
+    """Insert a new memory, optionally with a semantic vector embedding."""
     try:
         data = {
             "content": content,
@@ -48,11 +48,31 @@ def insert_memory(content: str, category: str, importance: int) -> dict | None:
             "times_referenced": 0,
             "last_referenced": datetime.now(timezone.utc).isoformat(),
         }
+        if embedding:
+            data["embedding"] = embedding
+            
         result = get_client().table("memories").insert(data).execute()
         return result.data[0] if result.data else None
     except Exception as e:
         logger.error(f"insert_memory: {e}")
         return None
+
+
+def search_similar_memories(query_embedding: list[float], match_threshold: float = 0.5, match_count: int = 15) -> list[dict]:
+    """Perform cosine similarity semantic search across the embedding mesh."""
+    try:
+        result = get_client().rpc(
+            "match_memories",
+            {
+                "query_embedding": query_embedding,
+                "match_threshold": match_threshold,
+                "match_count": match_count
+            }
+        ).execute()
+        return result.data or []
+    except Exception as e:
+        logger.error(f"search_similar_memories failed: {e}")
+        return []
 
 
 def find_similar_memory(content: str) -> dict | None:

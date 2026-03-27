@@ -2,7 +2,9 @@ flask
 flask-cors
 groq
 google-generativeai
-supabase
-requests
+supabase>=2.3.0
+python-telegram-bot>=20.0
+requests>=2.31.0
+python-dotenv>=1.0.0
 telethon
 gunicorn

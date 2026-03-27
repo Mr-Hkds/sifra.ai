@@ -136,6 +136,9 @@ def store_memories(extracted: list[dict]) -> int:
         category = mem["category"]
         importance = mem["importance"]
 
+        # Generate mathematical vector for semantic mesh mapping
+        embedding = ai_client.get_embedding(content)
+
         # Step 1: Check for near-duplicate
         existing = find_similar_memory(content)
         if existing:
@@ -175,8 +178,8 @@ def store_memories(extracted: list[dict]) -> int:
                 except Exception as e:
                     logger.warning(f"Contradiction check failed: {e}")
 
-        # Step 3: Insert new memory
-        insert_memory(content, category, importance)
+        # Step 3: Insert new memory with semantic vector
+        insert_memory(content, category, importance, embedding=embedding)
         count += 1
 
     return count
@@ -194,93 +197,35 @@ def process_extraction(user_message: str, recent_context: str = "") -> int:
 # RETRIEVAL — AI-Powered Semantic Recall
 # ---------------------------------------------------------------------------
 
-RANKING_PROMPT = """You are a memory retrieval system. Given a current message from a user, rank how relevant each memory is to the current conversation.
-
-CURRENT MESSAGE: "{message}"
-
-MEMORIES TO RANK (each has an ID number):
-{memories_list}
-
-For each memory, rate its relevance to the current message on a scale of 0-10:
-- 10 = directly about the same topic, should definitely be recalled
-- 7-9 = related topic, would add meaningful context
-- 4-6 = loosely related, might be useful background
-- 1-3 = not related to current message
-- 0 = completely irrelevant
-
-Consider SEMANTIC meaning, not just word matches. "kal test hai" is related to memories about exams, studying, academic stress, etc.
-
-Return a JSON object: {{"rankings": [{{"id": 1, "score": 8}}, {{"id": 2, "score": 3}}, ...]}}"""
-
-
 def recall_for_context(current_message: str, limit: int = MEMORY_RECALL_LIMIT) -> list[dict]:
     """
-    Retrieve memories relevant to the current conversation using AI ranking.
-    
-    Strategy:
-    1. Pre-filter: get top 30 memories by importance + recency (fast, no AI)
-    2. AI rank: send to AI for semantic relevance scoring
-    3. Blend: combine AI relevance with importance/recency for final ranking
-    
-    Falls back to importance-based ranking if AI call fails.
+    Retrieve memories relevant to the current conversation using Semantic Vector Search.
+    Falls back to recency/importance if embedding fails.
     """
-    from supabase_client import get_memories_for_ranking
+    from supabase_client import get_memories_for_ranking, search_similar_memories
 
-    candidates = get_memories_for_ranking(limit=30)
-    if not candidates:
-        return []
+    # 1. Generate embedding for the current user message
+    query_embedding = ai_client.get_embedding(current_message)
 
-    # If very few memories, skip AI ranking — just return them all
-    if len(candidates) <= limit:
-        return candidates
+    if query_embedding:
+        # 2. Perform vector search in Supabase (Cosine Similarity)
+        # Using a low threshold (0.15) because Gemini embeddings cluster tightly.
+        results = search_similar_memories(query_embedding, match_threshold=0.15, match_count=limit)
+        
+        if results:
+            # Sort by similarity combined with a slight boost for importance
+            def embed_score(mem):
+                sim = mem.get("similarity", 0.0)
+                imp = (mem.get("importance", 5) / 10.0) * 0.15
+                return sim + imp
+                
+            ranked = sorted(results, key=embed_score, reverse=True)
+            return ranked[:limit]
 
-    # Build numbered list for AI
-    memories_list = ""
-    for i, mem in enumerate(candidates):
-        memories_list += f"{i+1}. [{mem.get('category', '?')}] {mem.get('content', '')}\n"
-
-    try:
-        result = ai_client.extract_json(
-            system_prompt="Rank memory relevance to current message. Return valid JSON.",
-            user_prompt=RANKING_PROMPT.format(
-                message=current_message,
-                memories_list=memories_list.strip(),
-            ),
-            temperature=0.15,
-            max_tokens=500,
-        )
-
-        rankings = []
-        if isinstance(result, dict):
-            rankings = result.get("rankings", [])
-
-        if rankings:
-            # Build score map: memory index → AI relevance score
-            score_map = {}
-            for r in rankings:
-                if isinstance(r, dict):
-                    idx = r.get("id", 0) - 1  # Convert 1-indexed to 0-indexed
-                    score = r.get("score", 0)
-                    if 0 <= idx < len(candidates):
-                        score_map[idx] = score
-
-            # Blend AI relevance with importance for final ranking
-            scored = []
-            for i, mem in enumerate(candidates):
-                ai_score = score_map.get(i, 3)  # Default to low relevance if missing
-                importance = mem.get("importance", 5)
-                # AI relevance is primary (60%), importance is secondary (40%)
-                final_score = (ai_score / 10.0) * 0.6 + (importance / 10.0) * 0.4
-                scored.append((final_score, mem))
-
-            scored.sort(key=lambda x: x[0], reverse=True)
-            return [m for _, m in scored[:limit]]
-
-    except Exception as e:
-        logger.warning(f"AI memory ranking failed, using fallback: {e}")
-
-    # Fallback: return candidates already sorted by importance+recency
-    return candidates[:limit]
+    # Fallback: if API fails or no vector results
+    logger.warning("Vector search skipped or yielded 0 results, using fallback recall.")
+    candidates = get_memories_for_ranking(limit=limit)
+    return candidates
 
 
 def format_for_prompt(memories: list[dict]) -> str:

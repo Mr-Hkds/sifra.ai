@@ -805,11 +805,8 @@ def process_update(update: dict) -> dict:
                 final_reaction = pick_smart_reaction(text, context["sentiment"].emotion)
             
             if final_reaction:
-                threading.Thread(
-                    target=react_to_message_explicit,
-                    args=(chat_id, message_id, final_reaction),
-                    daemon=True,
-                ).start()
+                # Synchronous execution (Vercel fix)
+                react_to_message_explicit(chat_id, message_id, final_reaction)
 
         # --- Step 11: Natural response delay ---
         # No human responds in 200ms. Add a small reading delay.
@@ -827,18 +824,10 @@ def process_update(update: dict) -> dict:
 
         # --- Step 11: Send sticker or GIF if AI asked to ---
         if sticker_mood:
-            threading.Thread(
-                target=send_sticker_explicit,
-                args=(chat_id, sticker_mood),
-                daemon=True,
-            ).start()
+            send_sticker_explicit(chat_id, sticker_mood)
 
         if gif_query:
-            threading.Thread(
-                target=send_gif_explicit,
-                args=(chat_id, gif_query),
-                daemon=True,
-            ).start()
+            send_gif_explicit(chat_id, gif_query)
 
         # --- Step 12: Update state ---
         sifra_state_update = {
@@ -848,13 +837,8 @@ def process_update(update: dict) -> dict:
         }
         update_sifra_state(sifra_state_update)
 
-        # --- Step 13: Memory extraction (async) ---
-        thread = threading.Thread(
-            target=_extract_memories_async,
-            args=(text, recent_str),
-            daemon=True,
-        )
-        thread.start()
+        # --- Step 13: Memory extraction (Synchronous for Vercel) ---
+        _extract_memories_async(text, recent_str)
 
         return {"success": True, "reply": reply}
 
