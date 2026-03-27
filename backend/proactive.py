@@ -12,15 +12,12 @@ from datetime import datetime, timezone, timedelta
 import ai_client
 from supabase_client import (
     save_conversation, get_sifra_state, get_conversations, get_top_memories,
-    get_daily_proactive_count, get_last_proactive_timestamp,
 )
 from telegram_handler import send_message
 from config import (
     TIMEZONE_OFFSET, USER_TELEGRAM_ID, NEWS_API_KEY,
     ABSENCE_THRESHOLD_MINUTES, KIDHAR_HO_CHANCE,
     GOOD_MORNING_CHANCE, GOOD_NIGHT_CHANCE,
-    PROACTIVE_DAILY_BUDGET, PROACTIVE_COOLDOWN_HOURS,
-    PROACTIVE_CONVERSATION_BUFFER_MIN,
 )
 
 logger = logging.getLogger(__name__)
@@ -413,164 +410,23 @@ If you don't know a perfect song, skip this entirely and return nothing.""",
         return None
 
 
-# ---------------------------------------------------------------------------
-# Intelligence Gates — The spam prevention layer
-# ---------------------------------------------------------------------------
-
-def _check_daily_budget() -> bool:
-    """Return True if we still have budget to send today."""
-    try:
-        count = get_daily_proactive_count()
-        remaining = PROACTIVE_DAILY_BUDGET - count
-        if remaining <= 0:
-            logger.info(f"📊 Daily proactive budget exhausted ({count}/{PROACTIVE_DAILY_BUDGET})")
-            return False
-        logger.info(f"📊 Proactive budget: {remaining} remaining ({count}/{PROACTIVE_DAILY_BUDGET} used)")
-        return True
-    except Exception as e:
-        logger.error(f"Budget check failed: {e}")
-        return True  # Fail open — don't block on errors
-
-
-def _check_cooldown() -> bool:
-    """Return True if enough time has passed since last proactive message."""
-    try:
-        last_ts = get_last_proactive_timestamp()
-        if not last_ts:
-            return True  # No previous messages
-
-        last_time = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
-        elapsed_hours = (datetime.now(timezone.utc) - last_time).total_seconds() / 3600.0
-
-        if elapsed_hours < PROACTIVE_COOLDOWN_HOURS:
-            logger.info(f"⏳ Proactive cooldown: {elapsed_hours:.1f}h / {PROACTIVE_COOLDOWN_HOURS}h needed")
-            return False
-        return True
-    except Exception as e:
-        logger.error(f"Cooldown check failed: {e}")
-        return True
-
-
-def _check_conversation_buffer() -> bool:
-    """Return True if user isn't in an active conversation (don't interrupt)."""
-    try:
-        gap = _check_absence()
-        if gap is not None and gap < PROACTIVE_CONVERSATION_BUFFER_MIN:
-            logger.info(f"💬 Active conversation detected ({gap}min ago). Skipping proactive.")
-            return False
-        return True
-    except Exception:
-        return True
-
-
-# ---------------------------------------------------------------------------
-# Main Cron Handler — Now with intelligence gates
-# ---------------------------------------------------------------------------
-
-def run_proactive_job() -> dict:
+def send_proactive(message_type: str, content: str | None = None) -> dict:
     """
-    Main proactive endpoint. Called by cron.
-    
-    v2 Intelligence Gates (checked in order):
-    1. Sleep hours — no messages 1am-7am
-    2. Daily budget — max PROACTIVE_DAILY_BUDGET messages/day
-    3. Cooldown — PROACTIVE_COOLDOWN_HOURS between messages
-    4. Conversation buffer — don't interrupt active conversations
-    
-    Priority: absence check → time-based → engagement mechanics
+    Generate and send a single proactive message of the given type.
+    Can be called from telegram_handler or any trigger (NOT a cron).
+
+    message_type: one of 'good_morning', 'good_night', 'kidhar_ho',
+                  'memory_callback', 'gossip', 'internet_find',
+                  'random_thought', 'thinking_of_you', 'open_loop',
+                  'vulnerability', 'music_rec'
     """
     if not USER_TELEGRAM_ID:
         return {"sent": False, "reason": "No USER_TELEGRAM_ID"}
 
-    hour = _get_local_hour()
-
-    # Gate 1: Sleep hours — no messages between 1am and 7am
-    if 1 <= hour < 7:
-        return {"sent": False, "reason": f"Sleep hours ({hour}:00)"}
-
-    # Gate 2: Daily budget
-    if not _check_daily_budget():
-        return {"sent": False, "reason": "Daily budget exhausted"}
-
-    # Gate 3: Cooldown
-    if not _check_cooldown():
-        return {"sent": False, "reason": "Cooldown active"}
-
-    # Gate 4: Conversation buffer (don't interrupt active chats)
-    if not _check_conversation_buffer():
-        return {"sent": False, "reason": "Active conversation — skipping"}
-
-    # === All gates passed — pick what to send ===
-
-    # Priority 1: Kidhar ho — absent 4+ hours during waking hours
-    if 9 <= hour <= 23:
-        gap = _check_absence()
-        if gap and gap > ABSENCE_THRESHOLD_MINUTES and random.random() < KIDHAR_HO_CHANCE:
-            msg = _generate("kidhar_ho")
-            if msg:
-                return _send_and_save(msg, "kidhar_ho")
-
-    # Priority 2: Time-based morning/night
-    if 7 <= hour <= 9 and random.random() < GOOD_MORNING_CHANCE:
-        msg = _generate("good_morning")
-        if msg:
-            return _send_and_save(msg, "good_morning")
-
-    if (22 <= hour or hour == 0) and random.random() < GOOD_NIGHT_CHANCE:
-        msg = _generate("good_night")
-        if msg:
-            return _send_and_save(msg, "good_night")
-
-    # Priority 3: Engagement mechanics (daytime + evening)
-    if 10 <= hour <= 22:
-        roll = random.random()
-
-        # Memory callback — highest value, moderate frequency
-        if roll < 0.20:
-            msg = _generate("memory_callback")
-            if msg:
-                return _send_and_save(msg, "memory_callback")
-
-        # "She was thinking of him" — personal, referential
-        elif roll < 0.35:
-            msg = _generate("thinking_of_you")
-            if msg:
-                return _send_and_save(msg, "thinking_of_you")
-
-        # Open loop — creates reason to come back
-        elif roll < 0.45:
-            msg = _generate("open_loop")
-            if msg:
-                return _send_and_save(msg, "open_loop")
-
-        # Vulnerability — sparingly, builds trust
-        elif roll < 0.50:
-            msg = _generate("vulnerability")
-            if msg:
-                return _send_and_save(msg, "vulnerability")
-
-        # Gossip / internet find
-        elif roll < 0.62:
-            content = _discover_content()
-            if content:
-                msg_type = "gossip" if "[gossip]" in content.lower() else "internet_find"
-                msg = _generate(msg_type, content)
-                if msg:
-                    return _send_and_save(msg, msg_type)
-
-        # Music rec
-        elif roll < 0.68:
-            msg = _generate("music_rec")
-            if msg:
-                return _send_and_save(msg, "music_rec")
-
-        # Random thought — the catch-all, most natural
-        elif roll < 0.80:
-            msg = _generate("random_thought")
-            if msg:
-                return _send_and_save(msg, "random_thought")
-
-    return {"sent": False, "reason": "Random chance skipped"}
+    msg = _generate(message_type, content)
+    if not msg:
+        return {"sent": False, "reason": f"Generation returned nothing for type={message_type}"}
+    return _send_and_save(msg, message_type)
 
 
 def _send_and_save(message: str, msg_type: str) -> dict:
@@ -579,13 +435,12 @@ def _send_and_save(message: str, msg_type: str) -> dict:
     if success:
         save_conversation("sifra", message, mood_detected="proactive", platform="telegram")
 
-        # Log proactive send for budget/cooldown tracking
         try:
             from supabase_client import log_proactive_send
             log_proactive_send(msg_type)
         except Exception as e:
             logger.error(f"Failed to log proactive send: {e}")
 
-        logger.info(f"✅ Proactive sent: type={msg_type} | budget used")
+        logger.info(f"✅ Proactive sent: type={msg_type}")
         return {"sent": True, "type": msg_type, "message": message[:100]}
     return {"sent": False, "reason": "Telegram send failed"}

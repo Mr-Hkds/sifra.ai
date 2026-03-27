@@ -174,54 +174,6 @@ def api_reset_full():
 
 
 # ===================================================================
-# CRON ENDPOINTS
-# ===================================================================
-
-@app.route("/api/run_decay", methods=["POST"])
-def api_run_decay():
-    from memory_engine import run_decay, consolidate_memories
-    try:
-        affected = run_decay()
-        consolidated = consolidate_memories()
-        return jsonify({
-            "ok": True,
-            "memories_decayed": affected,
-            "memories_consolidated": consolidated,
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/proactive", methods=["GET", "POST"])
-def api_proactive():
-    from proactive import run_proactive_job
-    try:
-        return jsonify(run_proactive_job()), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-
-
-@app.route("/api/learnings", methods=["GET"])
-def api_learnings():
-    """Fetch observation learning stats, extracted patterns, AND memories."""
-    from supabase_client import get_observation_stats, get_all_learnings, get_top_memories
-    try:
-        stats = get_observation_stats()
-        learnings = get_all_learnings()
-        memories = get_top_memories(limit=50)
-        return jsonify({
-            "ok": True,
-            "stats": stats,
-            "learnings": learnings,
-            "memories": memories or []
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ===================================================================
 # STATUS & HEALTH
 # ===================================================================
 

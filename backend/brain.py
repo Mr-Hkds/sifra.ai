@@ -19,7 +19,8 @@ from memory_engine import (
     should_spontaneously_recall, get_random_memory,
 )
 from observation_engine import get_learnings_for_prompt
-from config import CONVERSATION_CONTEXT_LIMIT
+from realtime import get_realtime_context
+from config import CONVERSATION_CONTEXT_LIMIT, NEWS_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +29,18 @@ logger = logging.getLogger(__name__)
 # Prompt Construction — The Art
 # ---------------------------------------------------------------------------
 
-def _build_system_prompt(context: dict, memories_str: str, core_rules: str = "") -> str:
+def _build_system_prompt(
+    context: dict,
+    memories_str: str,
+    core_rules: str = "",
+    realtime: dict | None = None,
+) -> str:
     """
     Construct the layered system prompt.
 
+    Layer 0: Real-world context (live time, weather, news)
     Layer 1: Persona (identity + style + constraints)
-    Layer 2: Live context (time, mood, energy)
+    Layer 2: Live context (mood, energy, activity)
     Layer 3: Conversation dynamics (pace, length, phase)
     Layer 4: Memories
     Layer 5: Spontaneous recall instruction
@@ -44,16 +51,39 @@ def _build_system_prompt(context: dict, memories_str: str, core_rules: str = "")
     # Layer 1: Persona
     prompt = build_persona_prompt(personality_mode, core_rules)
 
+    # Layer 0: Real-world awareness — injected right after persona
+    rt = realtime or {}
+    rt_lines = []
+    if rt.get("time_str"):
+        rt_lines.append(f"Current time: {rt['time_str']} ({rt.get('date_str', '')}"  + ")")
+    if rt.get("weather"):
+        rt_lines.append(f"Weather right now (Delhi): {rt['weather']}")
+    if rt.get("news_headlines"):
+        rt_lines.append(f"Top India news: {rt['news_headlines']}")
+
+    if rt_lines:
+        prompt += "\n\n---\n[REAL-WORLD CONTEXT — you can use this naturally in conversation]\n"
+        prompt += "\n".join(rt_lines)
+        prompt += (
+            "\n\nINSTRUCTIONS: You KNOW this information. Use it naturally if relevant — "
+            "never say 'I checked' or 'according to X'. Just say it like you know it. "
+            "If the user asks about time/weather/news, answer confidently from this data."
+        )
+
     # Layer 2: Live context
     sifra_mood = _derive_sifra_mood(sentiment, context.get("time_label", "afternoon"))
     sifra_energy = _derive_sifra_energy(sentiment, context.get("time_label", "afternoon"))
     sifra_activity = _generate_sifra_activity(context.get("time_label", "afternoon"), sifra_mood)
 
+    # Use real time if available, otherwise fall back to context_engine's estimate
+    time_display = rt.get("time_str") or f"{context.get('hour', 12)}:00 IST"
+    date_display = rt.get("date_str") or context.get("day", "Today")
+
     prompt += f"""
 
 ---
 [CONTEXT]
-Time: {context.get('time_label', 'afternoon')} ({context.get('hour', 12)}:00 IST, {context.get('day', 'Today')})
+Time: {time_display} — {date_display}
 Your mood: {sifra_mood}
 Your energy: {sifra_energy}/10
 What you're doing: {sifra_activity}
@@ -291,33 +321,27 @@ def generate_response(
     Generate Sifra's response.
 
     Steps:
-    1. Retrieve context-relevant memories
-    2. Build layered system prompt
-    3. Format conversation history
-    4. Call AI (Gemini → Groq 70B → Groq 8B)
-    5. Validate through quality gate
-    6. Retry once if quality check fails
-
-    Parameters
-    ----------
-    user_message : str
-        The message Sifra is responding to.
-    context : dict
-        Context from context_engine.build_context().
-    conversation_history : list[dict]
-        Recent messages from the database.
-    core_rules : str
-        User-defined behavior rules.
-    web_search_results : str | None
-        Web search results to inject if relevant.
+    1. Fetch live real-world context (time, weather, news)
+    2. Retrieve context-relevant memories
+    3. Build layered system prompt
+    4. Format conversation history
+    5. Call AI (Gemini → Groq 70B → Groq 8B)
+    6. Validate through quality gate
+    7. Retry once if quality check fails
     """
+    # Step 1: Fetch real-time context (cached, ~0ms if warm)
+    try:
+        _rt = get_realtime_context(news_api_key=NEWS_API_KEY)
+    except Exception:
+        _rt = {}
+
     try:
         # Step 1: Retrieve relevant memories
         memories = recall_for_context(user_message)
         memories_str = format_for_prompt(memories)
 
         # Step 2: Build system prompt
-        system_prompt = _build_system_prompt(context, memories_str, core_rules)
+        system_prompt = _build_system_prompt(context, memories_str, core_rules, realtime=_rt)
 
         # Inject web search results if available
         if web_search_results:
