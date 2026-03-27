@@ -1,23 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BrainCircuit, Database, GitMerge, RefreshCw, Heart, Clock } from 'lucide-react';
-import { fetchLearnings as apiFetchLearnings } from '../utils/api';
+import { fetchMemories as apiFetchMemories } from '../utils/api';
 
 export default function LearningsDash() {
-  const [data, setData] = useState({ stats: null, learnings: [], memories: [] });
+  const [memories, setMemories] = useState([]);
+  const [learnings, setLearnings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchLearnings = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const json = await apiFetchLearnings();
-      
-      setData({
-        stats: json.stats,
-        learnings: json.learnings || [],
-        memories: json.memories || []
-      });
+      setError(null);
+
+      // Fetch memories from existing endpoint
+      const mems = await apiFetchMemories();
+      setMemories(Array.isArray(mems) ? mems : []);
+
+      // Try fetching learnings — gracefully handle 404 if endpoint doesn't exist
+      try {
+        const BASE_URL = import.meta.env.VITE_API_URL || '';
+        const resp = await fetch(`${BASE_URL}/api/learnings`);
+        if (resp.ok) {
+          const json = await resp.json();
+          setLearnings(json.learnings || []);
+        }
+        // If 404 — just leave learnings empty, no error shown
+      } catch {
+        // Silently ignore — learnings endpoint may not exist
+      }
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -26,10 +39,10 @@ export default function LearningsDash() {
   };
 
   useEffect(() => {
-    fetchLearnings();
+    fetchData();
   }, []);
 
-  if (loading && !data.stats) {
+  if (loading && memories.length === 0 && learnings.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="w-5 h-5 rounded-full bg-[var(--color-accent-green)] animate-ping" />
@@ -39,8 +52,6 @@ export default function LearningsDash() {
       </div>
     );
   }
-
-  const { stats, learnings, memories } = data;
 
   return (
     <div className="flex-1 max-w-[1400px] mx-auto w-full flex flex-col gap-6 py-8 px-6 overflow-y-auto">
@@ -57,7 +68,7 @@ export default function LearningsDash() {
         </div>
         
         <button 
-          onClick={fetchLearnings}
+          onClick={fetchData}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-md hover:border-[var(--color-accent-green)] transition-all text-sm group"
         >
@@ -73,34 +84,26 @@ export default function LearningsDash() {
       )}
 
       {/* Stats Grid */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard 
-            icon={<Heart size={16} />}
-            label="Active Memories"
-            value={memories.length}
-            color="var(--color-accent-green)"
-          />
-          <StatCard 
-            icon={<Database size={16} />}
-            label="Total Observations"
-            value={stats.total_observations}
-            color="var(--color-accent-blue)"
-          />
-          <StatCard 
-            icon={<BrainCircuit size={16} />}
-            label="Patterns Analyzed"
-            value={stats.analyzed}
-            color="var(--color-accent-purple)"
-          />
-          <StatCard 
-            icon={<GitMerge size={16} />}
-            label="Learned Behaviors"
-            value={stats.learnings_count}
-            color="var(--color-accent-yellow)"
-          />
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard 
+          icon={<Heart size={16} />}
+          label="Active Memories"
+          value={memories.length}
+          color="var(--color-accent-green)"
+        />
+        <StatCard 
+          icon={<BrainCircuit size={16} />}
+          label="Learned Behaviors"
+          value={learnings.length}
+          color="var(--color-accent-purple)"
+        />
+        <StatCard 
+          icon={<Database size={16} />}
+          label="Total Knowledge"
+          value={memories.length + learnings.length}
+          color="var(--color-accent-blue)"
+        />
+      </div>
 
       {/* Memories Section */}
       <div className="flex flex-col bg-[var(--color-bg-card)] border border-[var(--color-border-subtle)] rounded-xl overflow-hidden">
