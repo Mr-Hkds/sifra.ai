@@ -880,7 +880,12 @@ def process_update(update: dict) -> dict:
         update_sifra_state(sifra_state_update)
 
         # --- Step 13: Memory extraction (Synchronous for Vercel) ---
-        _extract_memories_async(text, recent_str)
+        try:
+            mem_count = memory_engine.process_extraction(text, recent_str)
+            if mem_count > 0:
+                logger.info(f"Extracted and stored {mem_count} memories")
+        except Exception as mem_err:
+            logger.error(f"Memory extraction failed: {mem_err}")
 
         # --- Step 14: Organic proactive check (piggyback on webhook) ---
         # No cron — feels natural. Checks hour + random chance.

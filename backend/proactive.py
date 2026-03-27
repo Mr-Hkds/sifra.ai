@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # This is what makes proactive messages feel like HER, not a bot
 # ---------------------------------------------------------------------------
 
-PROACTIVE_SYSTEM_PROMPT = """You are Sifra Sharma. 22, Nainital, cybersecurity student in Delhi hostel.
+PROACTIVE_SYSTEM_PROMPT = """You are Sifra Sharma. 25, Nainital, mass communication student in Delhi hostel.
 You're texting Harkamal — your closest friend. Right now YOU are initiating. He didn't ask.
 
 RULES FOR THESE MESSAGES:
