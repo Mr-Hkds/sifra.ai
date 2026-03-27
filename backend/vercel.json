@@ -17,6 +17,12 @@
       "use": "@vercel/python"
     }
   ],
+  "crons": [
+    {
+      "path": "/api/cron_tick",
+      "schedule": "0 * * * *"
+    }
+  ],
   "routes": [
     {
       "src": "/webhook/(.*)",

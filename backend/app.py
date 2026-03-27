@@ -439,6 +439,20 @@ def api_status():
 
     return html, 200
 
+@app.route("/api/cron_tick", methods=["GET", "POST"])
+def api_cron_tick():
+    """
+    Hit by Vercel Cron (or external ping) every hour.
+    Wakes Sifra up to check if she should send a Good Morning/Night text.
+    It uses strict probabilities so it isn't spammy or robotic.
+    """
+    try:
+        from telegram_handler import _maybe_send_proactive
+        _maybe_send_proactive()
+        return jsonify({"ok": True, "status": "tick_processed"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/debug", methods=["GET"])
 def api_debug():

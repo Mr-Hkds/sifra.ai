@@ -244,10 +244,10 @@ def save_episode(summary: str, importance: int = 7) -> dict | None:
     try:
         data = {
             "content": summary,
-            "category": "episode",
-            "importance": max(1, min(10, importance)),
+            "category": "core",  # Epidoes are core memories, rarely decay
+            "importance": importance,
             "decay_score": 1.0,
-            "times_referenced": 0,
+            "times_referenced": 1,
             "last_referenced": datetime.now(timezone.utc).isoformat(),
         }
         result = get_client().table("memories").insert(data).execute()
