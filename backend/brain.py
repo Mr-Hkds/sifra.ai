@@ -54,20 +54,48 @@ def _build_system_prompt(
     # Layer 0: Real-world awareness — injected right after persona
     rt = realtime or {}
     rt_lines = []
+
+    # Time & date — always available
     if rt.get("time_str"):
-        rt_lines.append(f"Current time: {rt['time_str']} ({rt.get('date_str', '')}"  + ")")
-    if rt.get("weather"):
-        rt_lines.append(f"Weather right now (Delhi): {rt['weather']}")
+        rt_lines.append(f"Current time: {rt['time_str']} ({rt.get('date_str', '')})")
+
+    # Weather — now a dict with weather_str, uv_str, sunrise, sunset
+    weather_data = rt.get("weather")
+    if isinstance(weather_data, dict):
+        if weather_data.get("weather_str"):
+            rt_lines.append(f"Weather: {weather_data['weather_str']}")
+        if weather_data.get("uv_str"):
+            rt_lines.append(f"{weather_data['uv_str']}")
+        if weather_data.get("sunrise") and weather_data.get("sunset"):
+            rt_lines.append(f"Sunrise: {weather_data['sunrise']} | Sunset: {weather_data['sunset']}")
+    elif isinstance(weather_data, str):
+        # Backward compat: old format was just a string
+        rt_lines.append(f"Weather: {weather_data}")
+
+    # Air quality
+    if rt.get("aqi"):
+        rt_lines.append(f"Delhi Air Quality: {rt['aqi']}")
+
+    # Today's occasion — holidays, festivals, weekends
+    if rt.get("occasion"):
+        rt_lines.append(f"📅 {rt['occasion']}")
+
+    # News headlines
     if rt.get("news_headlines"):
         rt_lines.append(f"Top India news: {rt['news_headlines']}")
 
     if rt_lines:
-        prompt += "\n\n---\n[REAL-WORLD CONTEXT — you can use this naturally in conversation]\n"
+        prompt += "\n\n---\n[REAL-WORLD CONTEXT — your live awareness of the world]\n"
         prompt += "\n".join(rt_lines)
         prompt += (
-            "\n\nINSTRUCTIONS: You KNOW this information. Use it naturally if relevant — "
-            "never say 'I checked' or 'according to X'. Just say it like you know it. "
-            "If the user asks about time/weather/news, answer confidently from this data."
+            "\n\nHOW TO USE THIS:"
+            "\n- You KNOW all of this. Never say 'I checked', 'according to sources', or 'maine search kiya'."
+            "\n- If asked about time/weather/news/AQI, answer confidently from this data."
+            "\n- Weather/AQI: mention naturally if relevant (e.g. 'bahar toh garmi hai yr', 'aaj pollution bhi zyada hai')."
+            "\n- News: only bring up if the conversation is about current events or he asks."
+            "\n- Festivals/holidays: wish him naturally if it's a special day, don't force it if already done."
+            "\n- Sunrise/sunset: use for late-night or early-morning vibes, don't randomly mention."
+            "\n- NEVER dump all this information at once. Pick what fits the conversation naturally."
         )
 
     # Layer 2: Live context
